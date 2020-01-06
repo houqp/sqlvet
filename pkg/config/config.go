@@ -1,0 +1,35 @@
+package config
+
+import (
+	"io/ioutil"
+	"os"
+	"path/filepath"
+
+	"github.com/pelletier/go-toml"
+
+	"github.com/houqp/sqlvet/pkg/vet"
+)
+
+type Config struct {
+	DbEngine        string               `toml:"db_engine"`
+	SchemaPath      string               `toml:"schema_path"`
+	SqlFuncMatchers []vet.SqlFuncMatcher `toml:"sqlfunc_matchers"`
+}
+
+func Load(searchPath string) (conf Config, err error) {
+	configPath := filepath.Join(searchPath, "sqlvet.toml")
+
+	if _, e := os.Stat(configPath); os.IsNotExist(e) {
+		conf.DbEngine = "postgres"
+		// return default config if not found
+		return
+	}
+
+	data, err := ioutil.ReadFile(configPath)
+	if err != nil {
+		return
+	}
+
+	err = toml.Unmarshal(data, &conf)
+	return
+}
