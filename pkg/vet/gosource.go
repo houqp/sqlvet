@@ -145,7 +145,7 @@ func handleQuery(ctx VetContext, qs *QuerySite) {
 
 func getMatchers(extraMatchers []SqlFuncMatcher) []*SqlFuncMatcher {
 	matchers := []*SqlFuncMatcher{
-		&SqlFuncMatcher{
+		{
 			PkgPath: "github.com/jmoiron/sqlx",
 			Rules: []SqlFuncMatchRule{
 				{QueryArgName: "query"},
@@ -157,7 +157,7 @@ func getMatchers(extraMatchers []SqlFuncMatcher) []*SqlFuncMatcher {
 				{QueryArgName: "sql", QueryArgPos: 2},
 			},
 		},
-		&SqlFuncMatcher{
+		{
 			PkgPath: "database/sql",
 			Rules: []SqlFuncMatchRule{
 				{QueryArgName: "query"},
@@ -167,7 +167,7 @@ func getMatchers(extraMatchers []SqlFuncMatcher) []*SqlFuncMatcher {
 				{QueryArgName: "sql", QueryArgPos: 1},
 			},
 		},
-		&SqlFuncMatcher{
+		{
 			PkgPath: "github.com/jinzhu/gorm",
 			Rules: []SqlFuncMatchRule{
 				{QueryArgName: "sql"},
@@ -186,13 +186,13 @@ func getMatchers(extraMatchers []SqlFuncMatcher) []*SqlFuncMatcher {
 		// 		{FuncName: "QuerySliceString"},
 		// 	},
 		// },
-		&SqlFuncMatcher{
+		{
 			PkgPath: "go-gorp/gorp",
 			Rules: []SqlFuncMatchRule{
 				{QueryArgName: "query"},
 			},
 		},
-		&SqlFuncMatcher{
+		{
 			PkgPath: "gopkg.in/gorp.v1",
 			Rules: []SqlFuncMatchRule{
 				{QueryArgName: "query"},

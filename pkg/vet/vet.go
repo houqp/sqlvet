@@ -364,7 +364,7 @@ func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) error {
 
 func validateUpdateStmt(ctx VetContext, stmt nodes.UpdateStmt) error {
 	tableName := *stmt.Relation.Relname
-	usedTables := []TableUsed{TableUsed{Name: tableName}}
+	usedTables := []TableUsed{{Name: tableName}}
 	usedTables = append(usedTables, getUsedTablesFromSelectStmt(stmt.FromClause)...)
 
 	usedCols := []ColumnUsed{}
@@ -403,7 +403,7 @@ func validateUpdateStmt(ctx VetContext, stmt nodes.UpdateStmt) error {
 
 func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) error {
 	tableName := *stmt.Relation.Relname
-	usedTables := []TableUsed{TableUsed{Name: tableName}}
+	usedTables := []TableUsed{{Name: tableName}}
 
 	targetCols := []ColumnUsed{}
 	for _, item := range stmt.Cols.Items {
@@ -528,7 +528,7 @@ func validateDeleteStmt(ctx VetContext, stmt nodes.DeleteStmt) error {
 	}
 
 	if len(usedCols) > 0 {
-		usedTables := []TableUsed{TableUsed{Name: tableName}}
+		usedTables := []TableUsed{{Name: tableName}}
 		if err := validateTableColumns(ctx, usedTables, usedCols); err != nil {
 			return err
 		}

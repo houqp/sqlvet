@@ -13,27 +13,27 @@ import (
 
 var mockDbSchema = &schema.Db{
 	Tables: map[string]schema.Table{
-		"foo": schema.Table{
+		"foo": {
 			Name: "foo",
 			Columns: map[string]schema.Column{
-				"id": schema.Column{
+				"id": {
 					Name: "id",
 					Type: "int",
 				},
-				"value": schema.Column{
+				"value": {
 					Name: "value",
 					Type: "varchar",
 				},
 			},
 		},
-		"bar": schema.Table{
+		"bar": {
 			Name: "bar",
 			Columns: map[string]schema.Column{
-				"id": schema.Column{
+				"id": {
 					Name: "id",
 					Type: "int",
 				},
-				"count": schema.Column{
+				"count": {
 					Name: "count",
 					Type: "int",
 				},
