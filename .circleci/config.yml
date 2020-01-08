@@ -8,3 +8,30 @@ jobs:
       - run: make test
       - run: go test -race -coverprofile=coverage.txt -covermode=atomic ./...
       - run: bash <(curl -s https://codecov.io/bash)
+
+#  publish-github-release:
+#    docker:
+#      - image: circleci/golang:1.13
+#    steps:
+#      - attach_workspace:
+#          at: ./artifacts
+#      - run:
+#          name: "Publish Release on GitHub"
+#          command: |
+#            curl -L https://github.com/tcnksm/ghr/releases/download/v0.13.0/ghr_v0.13.0_linux_amd64.tar.gz | tar xvzf
+#            ./ghr_v0.13.0_linux_amd64/ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} --replace `git describe --tags` ./artifacts/
+#
+#
+# workflows:
+#   version: 2
+#   main:
+#     jobs:
+#       - build
+#       - publish-github-release:
+#           requires:
+#             - build
+#           filters:
+#             branches:
+#               ignore: /.*/
+#             tags:
+#               only: /^v\d+\.\d+\.\d+$/

@@ -5,7 +5,7 @@
 [![CircleCI](https://circleci.com/gh/houqp/sqlvet.svg?style=svg)](https://circleci.com/gh/houqp/sqlvet)
 
 Sqlvet performs static analysis on raw SQL queries in your Go code base to
-surface potential runtime errors at compile time.
+surface potential runtime errors at build time.
 
 Feature highlights:
 
@@ -16,9 +16,10 @@ Feature highlights:
 * Validate column names
 
 TODO:
-* support MySQL syntax
-* type check value list in UPDATE query
-* trace wrapper function call
+* Validate query function argument count and types
+* Support MySQL syntax
+* Type check value list in UPDATE query
+* Trace wrapper function call
 
 
 ## Usage
@@ -27,16 +28,6 @@ TODO:
 
 ```
 $ go get github.com/houqp/sqlvet
-$ sqlvet
-Go fearless SQL
-
-Usage:
-  sqlvet PATH [flags]
-
-Flags:
-  -h, --help      help for sqlvet
-  -v, --verbose   verbose output
-      --version   version for sqlvet
 ```
 
 ### Zero conf
@@ -50,7 +41,7 @@ Checked 10 SQL queries.
 🎉 Everything is awesome!
 ```
 
-Note: unreachable code will not be checked.
+Note: unreachable code will be skipped.
 
 
 ### Schema validation
@@ -124,5 +115,7 @@ func foo() {
 ```
 
 
-This project is inspired by [safesql](https://github.com/stripe/safesql) and
+## Acknowledgements
+
+Sqlvet was inspired by [safesql](https://github.com/stripe/safesql) and
 [sqlc](https://github.com/kyleconroy/sqlc).
