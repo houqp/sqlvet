@@ -361,6 +361,22 @@ func getUsedColumnsFromWhereClause(ctx VetContext, clause nodes.Node) ([]ColumnU
 	return cols, err
 }
 
+func getUsedColumnsFromSortClause(sortList nodes.List) []ColumnUsed {
+	usedCols := []ColumnUsed{}
+	for _, item := range sortList.Items {
+		switch sortClause := item.(type) {
+		case nodes.SortBy:
+			if colRef, ok := sortClause.Node.(nodes.ColumnRef); ok {
+				cu := columnRefToColumnUsed(colRef)
+				if cu != nil {
+					usedCols = append(usedCols, *cu)
+				}
+			}
+		}
+	}
+	return usedCols
+}
+
 func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) error {
 	usedTables := getUsedTablesFromSelectStmt(stmt.FromClause)
 
@@ -392,6 +408,8 @@ func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) error {
 		}
 		usedCols = append(usedCols, whereCols...)
 	}
+
+	usedCols = append(usedCols, getUsedColumnsFromSortClause(stmt.SortClause)...)
 
 	return validateTableColumns(ctx, usedTables, usedCols)
 }

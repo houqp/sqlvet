@@ -269,6 +269,16 @@ func TestInvalidSelect(t *testing.T) {
 			WHERE value IS NULL`,
 			errors.New("column `date` is not defined in table `b`"),
 		},
+		{
+			"invalid column in order by",
+			`SELECT id, value FROM foo ORDER BY oops`,
+			errors.New("column `oops` is not defined in table `foo`"),
+		},
+		{
+			"invalid column in multiple order by",
+			`SELECT id, value FROM foo ORDER BY id, oops`,
+			errors.New("column `oops` is not defined in table `foo`"),
+		},
 	}
 
 	for _, tcase := range testCases {
