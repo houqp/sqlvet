@@ -258,6 +258,17 @@ func TestInvalidSelect(t *testing.T) {
 			`SELECT bar.id, value FROM foo LEFT JOIN bar ON foo.id=bar.uid WHERE foo.id=1`,
 			errors.New("column `uid` is not defined in table `bar`"),
 		},
+		{
+			"invalid column in select with multiple joins",
+			`SELECT id
+			FROM foo
+			LEFT JOIN bar b1 ON b1.id = foo.id
+			LEFT JOIN bar b ON b.date = foo.id
+			LEFT JOIN foo f ON f.id = foo.id
+			LEFT JOIN foo f2 ON f2.id = foo.id
+			WHERE value IS NULL`,
+			errors.New("column `date` is not defined in table `b`"),
+		},
 	}
 
 	for _, tcase := range testCases {
@@ -310,6 +321,14 @@ func TestSelect(t *testing.T) {
 		{
 			"select with null test",
 			`SELECT id FROM foo WHERE value IS NULL`,
+		},
+		{
+			"select with multiple joins",
+			`SELECT id
+			FROM foo
+			LEFT JOIN bar b ON b.id = foo.id
+			LEFT JOIN foo f ON f.id = foo.id
+			WHERE value IS NULL`,
 		},
 	}
 

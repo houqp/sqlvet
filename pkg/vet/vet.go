@@ -75,6 +75,19 @@ func columnRefToColumnUsed(colRef nodes.ColumnRef) *ColumnUsed {
 	return &cu
 }
 
+func getUsedTablesFromJoinArg(arg nodes.Node) []TableUsed {
+	switch n := arg.(type) {
+	case nodes.RangeVar:
+		return []TableUsed{rangeVarToTableUsed(n)}
+	case nodes.JoinExpr:
+		return append(
+			getUsedTablesFromJoinArg(n.Larg),
+			getUsedTablesFromJoinArg(n.Rarg)...)
+	default:
+		return []TableUsed{}
+	}
+}
+
 // extract used tables from FROM clause and JOIN clauses
 func getUsedTablesFromSelectStmt(fromClauseList nodes.List) []TableUsed {
 	usedTables := []TableUsed{}
@@ -91,13 +104,50 @@ func getUsedTablesFromSelectStmt(fromClauseList nodes.List) []TableUsed {
 			usedTables = append(usedTables, rangeVarToTableUsed(fromExpr))
 		case nodes.JoinExpr:
 			// SELECT with one or more JOINs
-			usedTables = append(usedTables, rangeVarToTableUsed(fromExpr.Larg.(nodes.RangeVar)))
-			usedTables = append(usedTables, rangeVarToTableUsed(fromExpr.Rarg.(nodes.RangeVar)))
-			// TODO: also check for table in columnRef in join condition expression
+			usedTables = append(usedTables, getUsedTablesFromJoinArg(fromExpr.Larg)...)
+			usedTables = append(usedTables, getUsedTablesFromJoinArg(fromExpr.Rarg)...)
 		}
 	}
 
 	return usedTables
+}
+
+func getUsedColumnsFromJoinQuals(quals nodes.Node) []ColumnUsed {
+	usedCols := []ColumnUsed{}
+
+	switch joinCond := quals.(type) {
+	case nodes.A_Expr:
+		lcolRef, ok := joinCond.Lexpr.(nodes.ColumnRef)
+		if ok {
+			cu := columnRefToColumnUsed(lcolRef)
+			if cu != nil {
+				usedCols = append(usedCols, *cu)
+			}
+		}
+		rcolRef, ok := joinCond.Rexpr.(nodes.ColumnRef)
+		if ok {
+			cu := columnRefToColumnUsed(rcolRef)
+			if cu != nil {
+				usedCols = append(usedCols, *cu)
+			}
+		}
+	}
+
+	return usedCols
+}
+
+func getUsedColumnsFromJoinExpr(expr nodes.JoinExpr) []ColumnUsed {
+	usedCols := []ColumnUsed{}
+
+	if larg, ok := expr.Larg.(nodes.JoinExpr); ok {
+		usedCols = append(usedCols, getUsedColumnsFromJoinExpr(larg)...)
+	}
+	if rarg, ok := expr.Rarg.(nodes.JoinExpr); ok {
+		usedCols = append(usedCols, getUsedColumnsFromJoinExpr(rarg)...)
+	}
+	usedCols = append(usedCols, getUsedColumnsFromJoinQuals(expr.Quals)...)
+
+	return usedCols
 }
 
 func getUsedColumnsFromJoinClauses(fromClauseList nodes.List) []ColumnUsed {
@@ -116,23 +166,7 @@ func getUsedColumnsFromJoinClauses(fromClauseList nodes.List) []ColumnUsed {
 			continue
 		case nodes.JoinExpr:
 			// SELECT with one or more JOINs
-			switch joinCond := fromExpr.Quals.(type) {
-			case nodes.A_Expr:
-				lcolRef, ok := joinCond.Lexpr.(nodes.ColumnRef)
-				if ok {
-					cu := columnRefToColumnUsed(lcolRef)
-					if cu != nil {
-						usedCols = append(usedCols, *cu)
-					}
-				}
-				rcolRef, ok := joinCond.Rexpr.(nodes.ColumnRef)
-				if ok {
-					cu := columnRefToColumnUsed(rcolRef)
-					if cu != nil {
-						usedCols = append(usedCols, *cu)
-					}
-				}
-			}
+			usedCols = append(usedCols, getUsedColumnsFromJoinExpr(fromExpr)...)
 		}
 	}
 
