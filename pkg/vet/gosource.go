@@ -384,14 +384,14 @@ func iterCallGraphNodeCallees(ctx VetContext, cgNode *callgraph.Node, prog *ssa.
 					"pos":       prog.Fset.Position(callSite.Pos()),
 					"caller":    callerFunc,
 					"callerPkg": callerFunc.Pkg,
-				}).Info(fmt.Errorf("unsupported type in callgraph: %w", qs.Err))
+				}).Debug(fmt.Errorf("unsupported type in callgraph: %w", qs.Err))
 			case ErrQueryArgTODO:
 				log.WithFields(log.Fields{
 					"type":      reflect.TypeOf(queryArg),
 					"pos":       prog.Fset.Position(callSite.Pos()),
 					"caller":    callerFunc,
 					"callerPkg": callerFunc.Pkg,
-				}).Info(fmt.Errorf("TODO(callgraph) %w", qs.Err))
+				}).Debug(fmt.Errorf("TODO(callgraph) %w", qs.Err))
 				// skip to be supported query type
 				continue
 			default:
