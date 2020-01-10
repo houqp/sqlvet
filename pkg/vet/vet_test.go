@@ -279,6 +279,16 @@ func TestInvalidSelect(t *testing.T) {
 			`SELECT id, value FROM foo ORDER BY id, oops`,
 			errors.New("column `oops` is not defined in table `foo`"),
 		},
+		{
+			"invalid column in having",
+			`SELECT MAX(id), value FROM foo GROUP BY value HAVING MAX(oops) > 1`,
+			errors.New("column `oops` is not defined in table `foo`"),
+		},
+		{
+			"invalid column in having with AND",
+			`SELECT MAX(id), value FROM foo GROUP BY value HAVING MAX(oops) > 1 AND MAX(id) < 10`,
+			errors.New("column `oops` is not defined in table `foo`"),
+		},
 	}
 
 	for _, tcase := range testCases {

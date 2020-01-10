@@ -318,6 +318,14 @@ func getUsedColumnsFromQualifications(ctx VetContext, clause nodes.Node) ([]Colu
 		// WHERE 1
 	case nodes.FuncCall:
 		// WHERE date=NOW()
+		// WHERE MAX(id) > 1
+		for _, item := range expr.Args.Items {
+			cols, err := getUsedColumnsFromQualifications(ctx, item)
+			if err != nil {
+				return nil, err
+			}
+			usedCols = append(usedCols, cols...)
+		}
 	case nodes.TypeCast:
 		// WHERE foo=True
 		return getUsedColumnsFromQualifications(ctx, expr.Arg)
@@ -407,6 +415,14 @@ func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) error {
 			return err
 		}
 		usedCols = append(usedCols, whereCols...)
+	}
+
+	if stmt.HavingClause != nil {
+		havingCols, err := getUsedColumnsFromQualifications(ctx, stmt.HavingClause)
+		if err != nil {
+			return err
+		}
+		usedCols = append(usedCols, havingCols...)
 	}
 
 	usedCols = append(usedCols, getUsedColumnsFromSortClause(stmt.SortClause)...)
