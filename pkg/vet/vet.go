@@ -356,6 +356,13 @@ func parseQualifications(ctx VetContext, clause nodes.Node, qualInfo *QualInfo) 
 		if len(queryParams) > 0 {
 			qualInfo.Params = append(qualInfo.Params, queryParams...)
 		}
+	case nodes.CoalesceExpr:
+		for _, item := range expr.Args.Items {
+			err := parseQualifications(ctx, item, qualInfo)
+			if err != nil {
+				return err
+			}
+		}
 	default:
 		return fmt.Errorf(
 			"Unsupported qualification, found node of type: %v",

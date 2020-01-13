@@ -83,16 +83,24 @@ func TestInsert(t *testing.T) {
 			"insert with return",
 			`INSERT INTO foo (id) VALUES (1) RETURNING value`,
 		},
+		{
+			"insert with coalesce expr",
+			`INSERT INTO foo (
+				id, value
+			) VALUES (
+				$1,
+				setweight(to_tsvector(substring(coalesce($1, '') for 1000000)), 'A') || setweight(to_tsvector(substring(coalesce($2, '') for 1000000)), 'B')
+			) RETURNING id`,
+		},
 	}
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			_, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
 			if err != nil {
 				vet.DebugQuery(tcase.Query)
 			}
 			assert.NoError(t, err)
-			assert.Equal(t, 0, len(qparams))
 		})
 	}
 }
@@ -214,12 +222,11 @@ func TestInvalidInsert(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			_, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
 			if err == nil {
 				vet.DebugQuery(tcase.Query)
 			}
 			assert.Equal(t, tcase.Err, err)
-			assert.Equal(t, 0, len(qparams))
 		})
 	}
 }
