@@ -31,10 +31,11 @@ var (
 )
 
 type QuerySite struct {
-	Called   string
-	Position token.Position
-	Query    string
-	Err      error
+	Called        string
+	Position      token.Position
+	Query         string
+	ParameterArgs []ssa.Value
+	Err           error
 }
 
 type MatchedSqlFunc struct {
@@ -140,7 +141,16 @@ func handleQuery(ctx VetContext, qs *QuerySite) {
 		return
 	}
 
-	qs.Err = ValidateSqlQuery(ctx, qs.Query)
+	var queryParams []QueryParam
+	queryParams, qs.Err = ValidateSqlQuery(ctx, qs.Query)
+
+	if qs.Err != nil {
+		return
+	}
+
+	// query string is valid, now validate parameter args if exists
+	if len(qs.ParameterArgs) != len(queryParams) {
+	}
 }
 
 func getMatchers(extraMatchers []SqlFuncMatcher) []*SqlFuncMatcher {

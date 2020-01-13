@@ -87,11 +87,12 @@ func TestInsert(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
 			if err != nil {
 				vet.DebugQuery(tcase.Query)
 			}
 			assert.NoError(t, err)
+			assert.Equal(t, 0, len(qparams))
 		})
 	}
 }
@@ -126,6 +127,16 @@ func TestInvalidInsert(t *testing.T) {
 			"too many values",
 			`INSERT INTO foo (id, value) VALUES ($1, $2, $3)`,
 			errors.New("Column count 2 doesn't match value count 3."),
+		},
+		{
+			"invalid column in value list",
+			`INSERT INTO foo (id) VALUES (oops)`,
+			errors.New("column `oops` is not defined in table `foo`"),
+		},
+		{
+			"invalid column in value list as expression",
+			`INSERT INTO foo (id) VALUES (oops+1)`,
+			errors.New("column `oops` is not defined in table `foo`"),
 		},
 		{
 			"invalid table from select",
@@ -191,7 +202,7 @@ func TestInvalidInsert(t *testing.T) {
 				'test'
 			)`,
 			fmt.Errorf(
-				"Invalid SELECT query in value list: %w",
+				"Invalid value list: %w",
 				errors.New("column `ida` is not defined in table `bar`")),
 		},
 		{
@@ -203,11 +214,12 @@ func TestInvalidInsert(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
 			if err == nil {
 				vet.DebugQuery(tcase.Query)
 			}
 			assert.Equal(t, tcase.Err, err)
+			assert.Equal(t, 0, len(qparams))
 		})
 	}
 }
@@ -281,8 +293,8 @@ func TestInvalidSelect(t *testing.T) {
 		},
 		{
 			"invalid column in having",
-			`SELECT MAX(id), value FROM foo GROUP BY value HAVING MAX(oops) > 1`,
-			errors.New("column `oops` is not defined in table `foo`"),
+			`SELECT MAX(id), value FROM foo GROUP BY value HAVING MAX(uid) > 1`,
+			errors.New("column `uid` is not defined in table `foo`"),
 		},
 		{
 			"invalid column in having with AND",
@@ -293,11 +305,12 @@ func TestInvalidSelect(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
 			if err == nil {
 				vet.DebugQuery(tcase.Query)
 			}
 			assert.Equal(t, tcase.Err, err)
+			assert.Equal(t, 0, len(qparams))
 		})
 	}
 }
@@ -336,7 +349,7 @@ func TestSelect(t *testing.T) {
 		},
 		{
 			"select with where",
-			`SELECT id FROM foo WHERE value='bar' AND id=$1`,
+			`SELECT id FROM foo WHERE value='bar' AND id=1`,
 		},
 		{
 			"select with null test",
@@ -354,11 +367,12 @@ func TestSelect(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
 			if err != nil {
 				vet.DebugQuery(tcase.Query)
 			}
 			assert.NoError(t, err)
+			assert.Equal(t, 0, len(qparams))
 		})
 	}
 }
@@ -400,11 +414,12 @@ func TestUpdate(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
 			if err != nil {
 				vet.DebugQuery(tcase.Query)
 			}
 			assert.NoError(t, err)
+			assert.Equal(t, 0, len(qparams))
 		})
 	}
 }
@@ -454,8 +469,9 @@ func TestInvalidUpdate(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
 			assert.Equal(t, tcase.Err, err)
+			assert.Equal(t, 0, len(qparams))
 		})
 	}
 }
@@ -485,11 +501,12 @@ func TestDelete(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
 			if err != nil {
 				vet.DebugQuery(tcase.Query)
 			}
 			assert.NoError(t, err)
+			assert.Equal(t, 0, len(qparams))
 		})
 	}
 }
@@ -553,8 +570,59 @@ func TestInvalidDelete(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
 			assert.Equal(t, tcase.Err, err)
+			assert.Equal(t, 0, len(qparams))
+		})
+	}
+}
+
+func TestQueryParams(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		Query  string
+		Params []vet.QueryParam
+	}{
+		{
+			"select",
+			"SELECT id FROM foo WHERE value=$1",
+			[]vet.QueryParam{
+				{1},
+			},
+		},
+		{
+			"update",
+			"UPDATE foo SET value=$1 WHERE id=$2",
+			[]vet.QueryParam{
+				{1},
+				{2},
+			},
+		},
+		{
+			"insert",
+			"INSERT INTO foo (id, value) VALUES ($1, $2)",
+			[]vet.QueryParam{
+				{1},
+				{2},
+			},
+		},
+		{
+			"delete",
+			"DELETE FROM foo WHERE id=$1",
+			[]vet.QueryParam{
+				{1},
+			},
+		},
+	}
+
+	for _, tcase := range testCases {
+		t.Run(tcase.Name, func(t *testing.T) {
+			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			if err != nil {
+				vet.DebugQuery(tcase.Query)
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tcase.Params, qparams)
 		})
 	}
 }

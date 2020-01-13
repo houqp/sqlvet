@@ -27,6 +27,16 @@ type ColumnUsed struct {
 	Location int
 }
 
+type QueryParam struct {
+	Number int
+	// TODO: also store related column type info for analysis
+}
+
+type QualInfo struct {
+	Columns []ColumnUsed
+	Params  []QueryParam
+}
+
 func DebugQuery(q string) {
 	b, _ := pg_query.ParseToJSON(q)
 	var pretty bytes.Buffer
@@ -277,96 +287,92 @@ func validateInsertValues(ctx VetContext, cols []ColumnUsed, vals []nodes.Node) 
 	return nil
 }
 
-func getUsedColumnsFromQualifications(ctx VetContext, clause nodes.Node) ([]ColumnUsed, error) {
-	usedCols := []ColumnUsed{}
-
+func parseQualifications(ctx VetContext, clause nodes.Node, qualInfo *QualInfo) error {
 	switch expr := clause.(type) {
 	case nodes.A_Expr:
 		if expr.Lexpr != nil {
-			cols, err := getUsedColumnsFromQualifications(ctx, expr.Lexpr)
+			err := parseQualifications(ctx, expr.Lexpr, qualInfo)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			usedCols = append(usedCols, cols...)
 		}
 		if expr.Rexpr != nil {
-			cols, err := getUsedColumnsFromQualifications(ctx, expr.Rexpr)
+			err := parseQualifications(ctx, expr.Rexpr, qualInfo)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			usedCols = append(usedCols, cols...)
 		}
 	case nodes.BoolExpr:
 		for _, arg := range expr.Args.Items {
-			cols, err := getUsedColumnsFromQualifications(ctx, arg)
+			err := parseQualifications(ctx, arg, qualInfo)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			usedCols = append(usedCols, cols...)
 		}
 	case nodes.NullTest:
-		return getUsedColumnsFromQualifications(ctx, expr.Arg)
+		return parseQualifications(ctx, expr.Arg, qualInfo)
 	case nodes.ColumnRef:
 		cu := columnRefToColumnUsed(expr)
 		if cu == nil {
-			return usedCols, nil
+			return nil
 		}
-		usedCols = append(usedCols, *cu)
+		qualInfo.Columns = append(qualInfo.Columns, *cu)
 	case nodes.ParamRef:
 		// WHERE id=$1
+		qualInfo.Params = append(qualInfo.Params, QueryParam{Number: expr.Number})
 	case nodes.A_Const:
 		// WHERE 1
 	case nodes.FuncCall:
 		// WHERE date=NOW()
 		// WHERE MAX(id) > 1
 		for _, item := range expr.Args.Items {
-			cols, err := getUsedColumnsFromQualifications(ctx, item)
+			err := parseQualifications(ctx, item, qualInfo)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			usedCols = append(usedCols, cols...)
 		}
 	case nodes.TypeCast:
 		// WHERE foo=True
-		return getUsedColumnsFromQualifications(ctx, expr.Arg)
+		return parseQualifications(ctx, expr.Arg, qualInfo)
 	case nodes.List:
 		// WHERE id IN (1, 2, 3)
 		for _, item := range expr.Items {
-			cols, err := getUsedColumnsFromQualifications(ctx, item)
+			err := parseQualifications(ctx, item, qualInfo)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			usedCols = append(usedCols, cols...)
 		}
 	case nodes.SubLink:
 		// WHERE id IN (SELECT id FROM foo)
 		selectStmt, ok := expr.Subselect.(nodes.SelectStmt)
 		if !ok {
-			return nil, fmt.Errorf(
+			return fmt.Errorf(
 				"Unsupported subquery type: %s", reflect.TypeOf(expr.Subselect))
-		} else {
-			err := validateSelectStmt(ctx, selectStmt)
-			if err != nil {
-				return nil, err
-			}
+		}
+		queryParams, err := validateSelectStmt(ctx, selectStmt)
+		if err != nil {
+			return err
+		}
+		if len(queryParams) > 0 {
+			qualInfo.Params = append(qualInfo.Params, queryParams...)
 		}
 	default:
-		return nil, fmt.Errorf(
+		return fmt.Errorf(
 			"Unsupported qualification, found node of type: %v",
 			reflect.TypeOf(clause),
 		)
 	}
 
-	return usedCols, nil
+	return nil
 }
 
 // find used column names from where clause
-func getUsedColumnsFromWhereClause(ctx VetContext, clause nodes.Node) ([]ColumnUsed, error) {
-	cols, err := getUsedColumnsFromQualifications(ctx, clause)
+func parseWhereClause(ctx VetContext, clause nodes.Node, qualInfo *QualInfo) error {
+	err := parseQualifications(ctx, clause, qualInfo)
 	if err != nil {
-		return nil, fmt.Errorf("Invalid WHERE clause: %w", err)
+		err = fmt.Errorf("Invalid WHERE clause: %w", err)
 	}
-	return cols, err
+	return err
 }
 
 func getUsedColumnsFromSortClause(sortList nodes.List) []ColumnUsed {
@@ -385,10 +391,12 @@ func getUsedColumnsFromSortClause(sortList nodes.List) []ColumnUsed {
 	return usedCols
 }
 
-func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) error {
+func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) ([]QueryParam, error) {
 	usedTables := getUsedTablesFromSelectStmt(stmt.FromClause)
 
 	usedCols := []ColumnUsed{}
+	queryParams := []QueryParam{}
+
 	for _, item := range stmt.TargetList.Items {
 		target, ok := item.(nodes.ResTarget)
 		if !ok {
@@ -410,32 +418,48 @@ func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) error {
 	usedCols = append(usedCols, getUsedColumnsFromJoinClauses(stmt.FromClause)...)
 
 	if stmt.WhereClause != nil {
-		whereCols, err := getUsedColumnsFromWhereClause(ctx, stmt.WhereClause)
+		qinfo := &QualInfo{}
+		err := parseWhereClause(ctx, stmt.WhereClause, qinfo)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		usedCols = append(usedCols, whereCols...)
+		if len(qinfo.Columns) > 0 {
+			usedCols = append(usedCols, qinfo.Columns...)
+		}
+		if len(qinfo.Params) > 0 {
+			queryParams = append(queryParams, qinfo.Params...)
+		}
 	}
 
 	if stmt.HavingClause != nil {
-		havingCols, err := getUsedColumnsFromQualifications(ctx, stmt.HavingClause)
+		qinfo := &QualInfo{}
+		err := parseQualifications(ctx, stmt.HavingClause, qinfo)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		usedCols = append(usedCols, havingCols...)
+		if len(qinfo.Columns) > 0 {
+			usedCols = append(usedCols, qinfo.Columns...)
+		}
+		if len(qinfo.Params) > 0 {
+			queryParams = append(queryParams, qinfo.Params...)
+		}
 	}
 
-	usedCols = append(usedCols, getUsedColumnsFromSortClause(stmt.SortClause)...)
+	if len(stmt.SortClause.Items) > 0 {
+		usedCols = append(usedCols, getUsedColumnsFromSortClause(stmt.SortClause)...)
+	}
 
-	return validateTableColumns(ctx, usedTables, usedCols)
+	return queryParams, validateTableColumns(ctx, usedTables, usedCols)
 }
 
-func validateUpdateStmt(ctx VetContext, stmt nodes.UpdateStmt) error {
+func validateUpdateStmt(ctx VetContext, stmt nodes.UpdateStmt) ([]QueryParam, error) {
 	tableName := *stmt.Relation.Relname
 	usedTables := []TableUsed{{Name: tableName}}
 	usedTables = append(usedTables, getUsedTablesFromSelectStmt(stmt.FromClause)...)
 
 	usedCols := []ColumnUsed{}
+	queryParams := []QueryParam{}
+
 	for _, item := range stmt.TargetList.Items {
 		target := item.(nodes.ResTarget)
 		usedCols = append(usedCols, ColumnUsed{
@@ -444,32 +468,41 @@ func validateUpdateStmt(ctx VetContext, stmt nodes.UpdateStmt) error {
 			Location: target.Location,
 		})
 
-		colRef, ok := target.Val.(nodes.ColumnRef)
-		if ok {
+		// 'val' is the expression to assign.
+		switch expr := target.Val.(type) {
+		case nodes.ColumnRef:
 			// UPDATE table1 SET table1.foo=table2.bar FROM table2
-			cu := columnRefToColumnUsed(colRef)
+			cu := columnRefToColumnUsed(expr)
 			if cu != nil {
 				usedCols = append(usedCols, *cu)
 			}
+		case nodes.ParamRef:
+			queryParams = append(queryParams, QueryParam{Number: expr.Number})
 		}
 	}
 
 	if stmt.WhereClause != nil {
-		whereCols, err := getUsedColumnsFromWhereClause(ctx, stmt.WhereClause)
+		qinfo := &QualInfo{}
+		err := parseWhereClause(ctx, stmt.WhereClause, qinfo)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		usedCols = append(usedCols, whereCols...)
+		if len(qinfo.Columns) > 0 {
+			usedCols = append(usedCols, qinfo.Columns...)
+		}
+		if len(qinfo.Params) > 0 {
+			queryParams = append(queryParams, qinfo.Params...)
+		}
 	}
 
 	if len(stmt.ReturningList.Items) > 0 {
 		usedCols = append(usedCols, getUsedColumnsFromReturningList(stmt.ReturningList)...)
 	}
 
-	return validateTableColumns(ctx, usedTables, usedCols)
+	return queryParams, validateTableColumns(ctx, usedTables, usedCols)
 }
 
-func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) error {
+func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) ([]QueryParam, error) {
 	tableName := *stmt.Relation.Relname
 	usedTables := []TableUsed{{Name: tableName}}
 
@@ -487,6 +520,7 @@ func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) error {
 	// make a copy of targetCols because we need it to do value count
 	// validation separately
 	usedCols := append([]ColumnUsed{}, targetCols...)
+	queryParams := []QueryParam{}
 
 	selectStmt := stmt.SelectStmt.(nodes.SelectStmt)
 	if selectStmt.ValuesLists != nil {
@@ -502,17 +536,16 @@ func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) error {
 		 * analysis to reject that where not valid.
 		 */
 		for _, node := range selectStmt.ValuesLists[0] {
-			switch v := node.(type) {
-			case nodes.SubLink:
-				subquery, ok := v.Subselect.(nodes.SelectStmt)
-				if !ok {
-					return fmt.Errorf(
-						"Unsupported subquery type in value list: %s", reflect.TypeOf(v.Subselect))
-				}
-				err := validateSelectStmt(ctx, subquery)
-				if err != nil {
-					return fmt.Errorf("Invalid SELECT query in value list: %w", err)
-				}
+			qinfo := &QualInfo{}
+			err := parseQualifications(ctx, node, qinfo)
+			if err != nil {
+				return nil, fmt.Errorf("Invalid value list: %w", err)
+			}
+			if len(qinfo.Columns) > 0 {
+				usedCols = append(usedCols, qinfo.Columns...)
+			}
+			if len(qinfo.Params) > 0 {
+				queryParams = append(queryParams, qinfo.Params...)
 			}
 			values = append(values, node)
 		}
@@ -527,11 +560,17 @@ func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) error {
 			usedCols, getUsedColumnsFromJoinClauses(selectStmt.FromClause)...)
 
 		if selectStmt.WhereClause != nil {
-			whereCols, err := getUsedColumnsFromWhereClause(ctx, selectStmt.WhereClause)
+			qinfo := &QualInfo{}
+			err := parseWhereClause(ctx, selectStmt.WhereClause, qinfo)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			usedCols = append(usedCols, whereCols...)
+			if len(qinfo.Columns) > 0 {
+				usedCols = append(usedCols, qinfo.Columns...)
+			}
+			if len(qinfo.Params) > 0 {
+				queryParams = append(queryParams, qinfo.Params...)
+			}
 		}
 
 		for _, item := range selectStmt.TargetList.Items {
@@ -548,12 +587,15 @@ func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) error {
 			case nodes.SubLink:
 				subquery, ok := targetVal.Subselect.(nodes.SelectStmt)
 				if !ok {
-					return fmt.Errorf(
+					return nil, fmt.Errorf(
 						"Unsupported subquery type in value list: %s", reflect.TypeOf(targetVal.Subselect))
 				}
-				err := validateSelectStmt(ctx, subquery)
+				qparams, err := validateSelectStmt(ctx, subquery)
 				if err != nil {
-					return fmt.Errorf("Invalid SELECT query in value list: %w", err)
+					return nil, fmt.Errorf("Invalid SELECT query in value list: %w", err)
+				}
+				if len(qparams) > 0 {
+					queryParams = append(queryParams, qparams...)
 				}
 			}
 		}
@@ -564,30 +606,37 @@ func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) error {
 	}
 
 	if err := validateTableColumns(ctx, usedTables, usedCols); err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := validateInsertValues(ctx, targetCols, values); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return queryParams, nil
 }
 
-func validateDeleteStmt(ctx VetContext, stmt nodes.DeleteStmt) error {
+func validateDeleteStmt(ctx VetContext, stmt nodes.DeleteStmt) ([]QueryParam, error) {
 	tableName := *stmt.Relation.Relname
 	if err := validateTable(ctx, tableName); err != nil {
-		return err
+		return nil, err
 	}
 
 	usedCols := []ColumnUsed{}
+	queryParams := []QueryParam{}
 
 	if stmt.WhereClause != nil {
-		whereCols, err := getUsedColumnsFromWhereClause(ctx, stmt.WhereClause)
+		qinfo := &QualInfo{}
+		err := parseWhereClause(ctx, stmt.WhereClause, qinfo)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		usedCols = append(usedCols, whereCols...)
+		if len(qinfo.Columns) > 0 {
+			usedCols = append(usedCols, qinfo.Columns...)
+		}
+		if len(qinfo.Params) > 0 {
+			queryParams = qinfo.Params
+		}
 	}
 
 	if len(stmt.ReturningList.Items) > 0 {
@@ -598,26 +647,26 @@ func validateDeleteStmt(ctx VetContext, stmt nodes.DeleteStmt) error {
 	if len(usedCols) > 0 {
 		usedTables := []TableUsed{{Name: tableName}}
 		if err := validateTableColumns(ctx, usedTables, usedCols); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	return nil
+	return queryParams, nil
 }
 
-func ValidateSqlQuery(ctx VetContext, queryStr string) error {
+func ValidateSqlQuery(ctx VetContext, queryStr string) ([]QueryParam, error) {
 	tree, err := pg_query.Parse(queryStr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if len(tree.Statements) == 0 || len(tree.Statements) > 1 {
-		return fmt.Errorf("query contained more than one statement.")
+		return nil, fmt.Errorf("query contained more than one statement.")
 	}
 
 	raw, ok := tree.Statements[0].(nodes.RawStmt)
 	if !ok {
-		return fmt.Errorf("query contained invalid statement.")
+		return nil, fmt.Errorf("query contained invalid statement.")
 	}
 
 	switch stmt := raw.Stmt.(type) {
@@ -636,8 +685,8 @@ func ValidateSqlQuery(ctx VetContext, queryStr string) error {
 	case nodes.VariableSetStmt:
 		// TODO: check for invalid pg variables
 	default:
-		return fmt.Errorf("unsupported statement: %v.", reflect.TypeOf(raw.Stmt))
+		return nil, fmt.Errorf("unsupported statement: %v.", reflect.TypeOf(raw.Stmt))
 	}
 
-	return nil
+	return nil, nil
 }
