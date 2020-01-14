@@ -225,3 +225,56 @@ func main() {
 func TestGoSource(t *testing.T) {
 	gtest.RunSubTests(t, &GoSourceTests{})
 }
+
+func (s *GoSourceTests) SubTestQueryParam(t *testing.T, fixtures struct {
+	TmpDir string `fixture:"GoSourceTmpDir"`
+}) {
+	dir := fixtures.TmpDir
+
+	source := []byte(`
+package main
+
+import (
+	"context"
+	"database/sql"
+)
+
+func main() {
+	db, _ := sql.Open("mysql", "user:password@tcp(127.0.0.1:3306)/hello")
+
+	db.Query("SELECT 2 FROM foo WHERE id=$1", 1)
+
+	db.Exec("UPDATE foo SET id = $1", 10)
+
+	ctx := context.Background()
+	tx, _ := db.Begin()
+	tx.ExecContext(ctx, "INSERT INTO foo (id, value) VALUES ($1, $2)", 1, "hello")
+}
+	`)
+
+	fpath := filepath.Join(dir, "main.go")
+	err := ioutil.WriteFile(fpath, source, 0644)
+	assert.NoError(t, err)
+
+	queries, err := vet.CheckDir(vet.VetContext{}, dir, nil)
+	if err != nil {
+		t.Fatalf("Failed to load package: %s", err.Error())
+		return
+	}
+	assert.Equal(t, 3, len(queries))
+	sort.Slice(queries, func(i, j int) bool {
+		return queries[i].Position.Offset < queries[j].Position.Offset
+	})
+
+	assert.NoError(t, queries[0].Err)
+	assert.Equal(t, "SELECT 2 FROM foo WHERE id=$1", queries[0].Query)
+	assert.Equal(t, 1, queries[0].ParameterArgCount)
+
+	assert.NoError(t, queries[1].Err)
+	assert.Equal(t, "UPDATE foo SET id = $1", queries[1].Query)
+	assert.Equal(t, 1, queries[1].ParameterArgCount)
+
+	assert.NoError(t, queries[2].Err)
+	assert.Equal(t, "INSERT INTO foo (id, value) VALUES ($1, $2)", queries[2].Query)
+	assert.Equal(t, 2, queries[2].ParameterArgCount)
+}

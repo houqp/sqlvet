@@ -31,11 +31,11 @@ var (
 )
 
 type QuerySite struct {
-	Called        string
-	Position      token.Position
-	Query         string
-	ParameterArgs []ssa.Value
-	Err           error
+	Called            string
+	Position          token.Position
+	Query             string
+	ParameterArgCount int
+	Err               error
 }
 
 type MatchedSqlFunc struct {
@@ -383,6 +383,28 @@ func iterCallGraphNodeCallees(ctx VetContext, cgNode *callgraph.Node, prog *ssa.
 			Called:   inEdge.Callee.Func.Name(),
 			Position: callSitePosition,
 			Err:      nil,
+		}
+
+		if len(callArgs) > absArgPos+1 {
+			// query function accepts query parameters
+			paramArg := callArgs[absArgPos+1]
+			// only support query param as variadic argument for now
+			switch params := paramArg.(type) {
+			case *ssa.Const:
+				// likely nil
+			case *ssa.Slice:
+				sliceType := params.X.Type()
+				switch t := sliceType.(type) {
+				case *types.Pointer:
+					elem := t.Elem()
+					switch e := elem.(type) {
+					case *types.Array:
+						// query parameters are passed in as vararg: an array
+						// of interface
+						qs.ParameterArgCount = int(e.Len())
+					}
+				}
+			}
 		}
 
 		qs.Query, qs.Err = extractQueryStrFromSsaValue(queryArg)
