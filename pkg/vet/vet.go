@@ -409,6 +409,20 @@ func parseWhereClause(ctx VetContext, clause nodes.Node, parseRe *ParseResult) e
 	return err
 }
 
+func getUsedColumnsFromNodeList(nodelist nodes.List) []ColumnUsed {
+	usedCols := []ColumnUsed{}
+	for _, item := range nodelist.Items {
+		switch clause := item.(type) {
+		case nodes.ColumnRef:
+			cu := columnRefToColumnUsed(clause)
+			if cu != nil {
+				usedCols = append(usedCols, *cu)
+			}
+		}
+	}
+	return usedCols
+}
+
 func getUsedColumnsFromSortClause(sortList nodes.List) []ColumnUsed {
 	usedCols := []ColumnUsed{}
 	for _, item := range sortList.Items {
@@ -463,6 +477,10 @@ func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) ([]QueryParam, er
 		if len(re.Params) > 0 {
 			AddQueryParams(&queryParams, re.Params)
 		}
+	}
+
+	if len(stmt.GroupClause.Items) > 0 {
+		usedCols = append(usedCols, getUsedColumnsFromNodeList(stmt.GroupClause)...)
 	}
 
 	if stmt.HavingClause != nil {

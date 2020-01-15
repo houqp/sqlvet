@@ -299,6 +299,11 @@ func TestInvalidSelect(t *testing.T) {
 			errors.New("column `oops` is not defined in table `foo`"),
 		},
 		{
+			"invalid column in group by",
+			`SELECT MAX(id), value FROM foo GROUP BY oops`,
+			errors.New("column `oops` is not defined in table `foo`"),
+		},
+		{
 			"invalid column in having",
 			`SELECT MAX(id), value FROM foo GROUP BY value HAVING MAX(uid) > 1`,
 			errors.New("column `uid` is not defined in table `foo`"),
@@ -306,6 +311,11 @@ func TestInvalidSelect(t *testing.T) {
 		{
 			"invalid column in having with AND",
 			`SELECT MAX(id), value FROM foo GROUP BY value HAVING MAX(oops) > 1 AND MAX(id) < 10`,
+			errors.New("column `oops` is not defined in table `foo`"),
+		},
+		{
+			"invalid column in distinct",
+			`SELECT DISTINCT oops, value, id FROM foo`,
 			errors.New("column `oops` is not defined in table `foo`"),
 		},
 	}
