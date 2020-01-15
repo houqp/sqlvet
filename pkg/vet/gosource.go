@@ -149,7 +149,11 @@ func handleQuery(ctx VetContext, qs *QuerySite) {
 	}
 
 	// query string is valid, now validate parameter args if exists
-	if len(qs.ParameterArgs) != len(queryParams) {
+	if qs.ParameterArgCount < len(queryParams) {
+		// qs.Err = fmt.Errorf(
+		// 	"Query expects %d parameters, but received %d from function call",
+		// 	len(queryParams), qs.ParameterArgCount,
+		// )
 	}
 }
 
