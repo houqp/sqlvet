@@ -37,6 +37,33 @@ type QualInfo struct {
 	Params  []QueryParam
 }
 
+// insert query param based on parameter number and avoid deduplications
+func AddQueryParam(target *[]QueryParam, param QueryParam) {
+	params := *target
+	for i, p := range params {
+		if p.Number == param.Number {
+			// avoid duplicate params
+			return
+		} else if p.Number > param.Number {
+			*target = append(
+				params[:i],
+				append(
+					[]QueryParam{param},
+					params[i:]...,
+				)...,
+			)
+			return
+		}
+	}
+	*target = append(params, param)
+}
+
+func AddQueryParams(target *[]QueryParam, params []QueryParam) {
+	for _, p := range params {
+		AddQueryParam(target, p)
+	}
+}
+
 func DebugQuery(q string) {
 	b, _ := pg_query.ParseToJSON(q)
 	var pretty bytes.Buffer
@@ -319,7 +346,7 @@ func parseQualifications(ctx VetContext, clause nodes.Node, qualInfo *QualInfo) 
 		qualInfo.Columns = append(qualInfo.Columns, *cu)
 	case nodes.ParamRef:
 		// WHERE id=$1
-		qualInfo.Params = append(qualInfo.Params, QueryParam{Number: expr.Number})
+		AddQueryParam(&qualInfo.Params, QueryParam{Number: expr.Number})
 	case nodes.A_Const:
 		// WHERE 1
 	case nodes.FuncCall:
@@ -354,7 +381,7 @@ func parseQualifications(ctx VetContext, clause nodes.Node, qualInfo *QualInfo) 
 			return err
 		}
 		if len(queryParams) > 0 {
-			qualInfo.Params = append(qualInfo.Params, queryParams...)
+			AddQueryParams(&qualInfo.Params, queryParams)
 		}
 	case nodes.CoalesceExpr:
 		for _, item := range expr.Args.Items {
@@ -434,7 +461,7 @@ func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) ([]QueryParam, er
 			usedCols = append(usedCols, qinfo.Columns...)
 		}
 		if len(qinfo.Params) > 0 {
-			queryParams = append(queryParams, qinfo.Params...)
+			AddQueryParams(&queryParams, qinfo.Params)
 		}
 	}
 
@@ -448,7 +475,7 @@ func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) ([]QueryParam, er
 			usedCols = append(usedCols, qinfo.Columns...)
 		}
 		if len(qinfo.Params) > 0 {
-			queryParams = append(queryParams, qinfo.Params...)
+			AddQueryParams(&queryParams, qinfo.Params)
 		}
 	}
 
@@ -484,7 +511,7 @@ func validateUpdateStmt(ctx VetContext, stmt nodes.UpdateStmt) ([]QueryParam, er
 				usedCols = append(usedCols, *cu)
 			}
 		case nodes.ParamRef:
-			queryParams = append(queryParams, QueryParam{Number: expr.Number})
+			AddQueryParam(&queryParams, QueryParam{Number: expr.Number})
 		}
 	}
 
@@ -498,7 +525,7 @@ func validateUpdateStmt(ctx VetContext, stmt nodes.UpdateStmt) ([]QueryParam, er
 			usedCols = append(usedCols, qinfo.Columns...)
 		}
 		if len(qinfo.Params) > 0 {
-			queryParams = append(queryParams, qinfo.Params...)
+			AddQueryParams(&queryParams, qinfo.Params)
 		}
 	}
 
@@ -552,7 +579,7 @@ func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) ([]QueryParam, er
 				usedCols = append(usedCols, qinfo.Columns...)
 			}
 			if len(qinfo.Params) > 0 {
-				queryParams = append(queryParams, qinfo.Params...)
+				AddQueryParams(&queryParams, qinfo.Params)
 			}
 			values = append(values, node)
 		}
@@ -576,7 +603,7 @@ func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) ([]QueryParam, er
 				usedCols = append(usedCols, qinfo.Columns...)
 			}
 			if len(qinfo.Params) > 0 {
-				queryParams = append(queryParams, qinfo.Params...)
+				AddQueryParams(&queryParams, qinfo.Params)
 			}
 		}
 
@@ -602,7 +629,7 @@ func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) ([]QueryParam, er
 					return nil, fmt.Errorf("Invalid SELECT query in value list: %w", err)
 				}
 				if len(qparams) > 0 {
-					queryParams = append(queryParams, qparams...)
+					AddQueryParams(&queryParams, qparams)
 				}
 			}
 		}

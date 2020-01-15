@@ -249,6 +249,8 @@ func main() {
 	ctx := context.Background()
 	tx, _ := db.Begin()
 	tx.ExecContext(ctx, "INSERT INTO foo (id, value) VALUES ($1, $2)", 1, "hello")
+
+	db.Query("SELECT 2 FROM foo WHERE id=$1 OR value=$1", 1)
 }
 	`)
 
@@ -261,7 +263,7 @@ func main() {
 		t.Fatalf("Failed to load package: %s", err.Error())
 		return
 	}
-	assert.Equal(t, 3, len(queries))
+	assert.Equal(t, 4, len(queries))
 	sort.Slice(queries, func(i, j int) bool {
 		return queries[i].Position.Offset < queries[j].Position.Offset
 	})
@@ -277,4 +279,8 @@ func main() {
 	assert.NoError(t, queries[2].Err)
 	assert.Equal(t, "INSERT INTO foo (id, value) VALUES ($1, $2)", queries[2].Query)
 	assert.Equal(t, 2, queries[2].ParameterArgCount)
+
+	assert.NoError(t, queries[3].Err)
+	assert.Equal(t, "SELECT 2 FROM foo WHERE id=$1 OR value=$1", queries[3].Query)
+	assert.Equal(t, 1, queries[3].ParameterArgCount)
 }
