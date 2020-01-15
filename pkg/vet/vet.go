@@ -32,7 +32,7 @@ type QueryParam struct {
 	// TODO: also store related column type info for analysis
 }
 
-type QualInfo struct {
+type ParseResult struct {
 	Columns []ColumnUsed
 	Params  []QueryParam
 }
@@ -314,57 +314,57 @@ func validateInsertValues(ctx VetContext, cols []ColumnUsed, vals []nodes.Node) 
 	return nil
 }
 
-func parseQualifications(ctx VetContext, clause nodes.Node, qualInfo *QualInfo) error {
+func parseQualifications(ctx VetContext, clause nodes.Node, parseRe *ParseResult) error {
 	switch expr := clause.(type) {
 	case nodes.A_Expr:
 		if expr.Lexpr != nil {
-			err := parseQualifications(ctx, expr.Lexpr, qualInfo)
+			err := parseQualifications(ctx, expr.Lexpr, parseRe)
 			if err != nil {
 				return err
 			}
 		}
 		if expr.Rexpr != nil {
-			err := parseQualifications(ctx, expr.Rexpr, qualInfo)
+			err := parseQualifications(ctx, expr.Rexpr, parseRe)
 			if err != nil {
 				return err
 			}
 		}
 	case nodes.BoolExpr:
 		for _, arg := range expr.Args.Items {
-			err := parseQualifications(ctx, arg, qualInfo)
+			err := parseQualifications(ctx, arg, parseRe)
 			if err != nil {
 				return err
 			}
 		}
 	case nodes.NullTest:
-		return parseQualifications(ctx, expr.Arg, qualInfo)
+		return parseQualifications(ctx, expr.Arg, parseRe)
 	case nodes.ColumnRef:
 		cu := columnRefToColumnUsed(expr)
 		if cu == nil {
 			return nil
 		}
-		qualInfo.Columns = append(qualInfo.Columns, *cu)
+		parseRe.Columns = append(parseRe.Columns, *cu)
 	case nodes.ParamRef:
 		// WHERE id=$1
-		AddQueryParam(&qualInfo.Params, QueryParam{Number: expr.Number})
+		AddQueryParam(&parseRe.Params, QueryParam{Number: expr.Number})
 	case nodes.A_Const:
 		// WHERE 1
 	case nodes.FuncCall:
 		// WHERE date=NOW()
 		// WHERE MAX(id) > 1
 		for _, item := range expr.Args.Items {
-			err := parseQualifications(ctx, item, qualInfo)
+			err := parseQualifications(ctx, item, parseRe)
 			if err != nil {
 				return err
 			}
 		}
 	case nodes.TypeCast:
 		// WHERE foo=True
-		return parseQualifications(ctx, expr.Arg, qualInfo)
+		return parseQualifications(ctx, expr.Arg, parseRe)
 	case nodes.List:
 		// WHERE id IN (1, 2, 3)
 		for _, item := range expr.Items {
-			err := parseQualifications(ctx, item, qualInfo)
+			err := parseQualifications(ctx, item, parseRe)
 			if err != nil {
 				return err
 			}
@@ -381,11 +381,11 @@ func parseQualifications(ctx VetContext, clause nodes.Node, qualInfo *QualInfo) 
 			return err
 		}
 		if len(queryParams) > 0 {
-			AddQueryParams(&qualInfo.Params, queryParams)
+			AddQueryParams(&parseRe.Params, queryParams)
 		}
 	case nodes.CoalesceExpr:
 		for _, item := range expr.Args.Items {
-			err := parseQualifications(ctx, item, qualInfo)
+			err := parseQualifications(ctx, item, parseRe)
 			if err != nil {
 				return err
 			}
@@ -401,8 +401,8 @@ func parseQualifications(ctx VetContext, clause nodes.Node, qualInfo *QualInfo) 
 }
 
 // find used column names from where clause
-func parseWhereClause(ctx VetContext, clause nodes.Node, qualInfo *QualInfo) error {
-	err := parseQualifications(ctx, clause, qualInfo)
+func parseWhereClause(ctx VetContext, clause nodes.Node, parseRe *ParseResult) error {
+	err := parseQualifications(ctx, clause, parseRe)
 	if err != nil {
 		err = fmt.Errorf("Invalid WHERE clause: %w", err)
 	}
@@ -452,30 +452,30 @@ func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) ([]QueryParam, er
 	usedCols = append(usedCols, getUsedColumnsFromJoinClauses(stmt.FromClause)...)
 
 	if stmt.WhereClause != nil {
-		qinfo := &QualInfo{}
-		err := parseWhereClause(ctx, stmt.WhereClause, qinfo)
+		re := &ParseResult{}
+		err := parseWhereClause(ctx, stmt.WhereClause, re)
 		if err != nil {
 			return nil, err
 		}
-		if len(qinfo.Columns) > 0 {
-			usedCols = append(usedCols, qinfo.Columns...)
+		if len(re.Columns) > 0 {
+			usedCols = append(usedCols, re.Columns...)
 		}
-		if len(qinfo.Params) > 0 {
-			AddQueryParams(&queryParams, qinfo.Params)
+		if len(re.Params) > 0 {
+			AddQueryParams(&queryParams, re.Params)
 		}
 	}
 
 	if stmt.HavingClause != nil {
-		qinfo := &QualInfo{}
-		err := parseQualifications(ctx, stmt.HavingClause, qinfo)
+		re := &ParseResult{}
+		err := parseQualifications(ctx, stmt.HavingClause, re)
 		if err != nil {
 			return nil, err
 		}
-		if len(qinfo.Columns) > 0 {
-			usedCols = append(usedCols, qinfo.Columns...)
+		if len(re.Columns) > 0 {
+			usedCols = append(usedCols, re.Columns...)
 		}
-		if len(qinfo.Params) > 0 {
-			AddQueryParams(&queryParams, qinfo.Params)
+		if len(re.Params) > 0 {
+			AddQueryParams(&queryParams, re.Params)
 		}
 	}
 
@@ -516,16 +516,16 @@ func validateUpdateStmt(ctx VetContext, stmt nodes.UpdateStmt) ([]QueryParam, er
 	}
 
 	if stmt.WhereClause != nil {
-		qinfo := &QualInfo{}
-		err := parseWhereClause(ctx, stmt.WhereClause, qinfo)
+		re := &ParseResult{}
+		err := parseWhereClause(ctx, stmt.WhereClause, re)
 		if err != nil {
 			return nil, err
 		}
-		if len(qinfo.Columns) > 0 {
-			usedCols = append(usedCols, qinfo.Columns...)
+		if len(re.Columns) > 0 {
+			usedCols = append(usedCols, re.Columns...)
 		}
-		if len(qinfo.Params) > 0 {
-			AddQueryParams(&queryParams, qinfo.Params)
+		if len(re.Params) > 0 {
+			AddQueryParams(&queryParams, re.Params)
 		}
 	}
 
@@ -570,16 +570,16 @@ func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) ([]QueryParam, er
 		 * analysis to reject that where not valid.
 		 */
 		for _, node := range selectStmt.ValuesLists[0] {
-			qinfo := &QualInfo{}
-			err := parseQualifications(ctx, node, qinfo)
+			re := &ParseResult{}
+			err := parseQualifications(ctx, node, re)
 			if err != nil {
 				return nil, fmt.Errorf("Invalid value list: %w", err)
 			}
-			if len(qinfo.Columns) > 0 {
-				usedCols = append(usedCols, qinfo.Columns...)
+			if len(re.Columns) > 0 {
+				usedCols = append(usedCols, re.Columns...)
 			}
-			if len(qinfo.Params) > 0 {
-				AddQueryParams(&queryParams, qinfo.Params)
+			if len(re.Params) > 0 {
+				AddQueryParams(&queryParams, re.Params)
 			}
 			values = append(values, node)
 		}
@@ -594,16 +594,16 @@ func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) ([]QueryParam, er
 			usedCols, getUsedColumnsFromJoinClauses(selectStmt.FromClause)...)
 
 		if selectStmt.WhereClause != nil {
-			qinfo := &QualInfo{}
-			err := parseWhereClause(ctx, selectStmt.WhereClause, qinfo)
+			re := &ParseResult{}
+			err := parseWhereClause(ctx, selectStmt.WhereClause, re)
 			if err != nil {
 				return nil, err
 			}
-			if len(qinfo.Columns) > 0 {
-				usedCols = append(usedCols, qinfo.Columns...)
+			if len(re.Columns) > 0 {
+				usedCols = append(usedCols, re.Columns...)
 			}
-			if len(qinfo.Params) > 0 {
-				AddQueryParams(&queryParams, qinfo.Params)
+			if len(re.Params) > 0 {
+				AddQueryParams(&queryParams, re.Params)
 			}
 		}
 
@@ -660,16 +660,16 @@ func validateDeleteStmt(ctx VetContext, stmt nodes.DeleteStmt) ([]QueryParam, er
 	queryParams := []QueryParam{}
 
 	if stmt.WhereClause != nil {
-		qinfo := &QualInfo{}
-		err := parseWhereClause(ctx, stmt.WhereClause, qinfo)
+		re := &ParseResult{}
+		err := parseWhereClause(ctx, stmt.WhereClause, re)
 		if err != nil {
 			return nil, err
 		}
-		if len(qinfo.Columns) > 0 {
-			usedCols = append(usedCols, qinfo.Columns...)
+		if len(re.Columns) > 0 {
+			usedCols = append(usedCols, re.Columns...)
 		}
-		if len(qinfo.Params) > 0 {
-			queryParams = qinfo.Params
+		if len(re.Params) > 0 {
+			queryParams = re.Params
 		}
 	}
 
