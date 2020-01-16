@@ -17,6 +17,10 @@ import (
 
 const Version = "1.0.0"
 
+var (
+	FlagErrFormat = false
+)
+
 type SqlVet struct {
 	QueryCnt int32
 	ErrCnt   int32
@@ -46,14 +50,29 @@ func (s *SqlVet) Vet() {
 	for _, q := range queries {
 		atomic.AddInt32(&s.QueryCnt, 1)
 
-		if cli.Verbose || q.Err != nil {
+		if q.Err == nil {
+			if cli.Verbose {
+				cli.Show("query detected at %s", q.Position)
+			}
+			continue
+		}
+
+		// an error in the query is detected
+		if FlagErrFormat {
+			relFilePath, err := filepath.Rel(s.ProjectRoot, q.Position.Filename)
+			if err != nil {
+				relFilePath = s.ProjectRoot
+			}
+			// format ref: https://github.com/reviewdog/reviewdog#errorformat
+			cli.Show(
+				"%s:%d:%d: %v",
+				relFilePath, q.Position.Line, q.Position.Column, q.Err)
+		} else {
 			cli.Bold("%s @ %s", q.Called, q.Position)
 			if q.Query != "" {
 				cli.Show("\t%s\n", q.Query)
 			}
-		}
 
-		if q.Err != nil {
 			s.reportError("\tERROR: %v", q.Err)
 			switch q.Err {
 			case vet.ErrQueryArgUnsafe:
@@ -85,12 +104,16 @@ func NewSqlVet(projectRoot string) (*SqlVet, error) {
 		if err != nil {
 			return nil, err
 		}
-		cli.Show("Loaded DB schema from %s", cfg.SchemaPath)
-		for k, v := range dbSchema.Tables {
-			cli.Show("\ttable %s with %d columns", k, len(v.Columns))
+		if !FlagErrFormat {
+			cli.Show("Loaded DB schema from %s", cfg.SchemaPath)
+			for k, v := range dbSchema.Tables {
+				cli.Show("\ttable %s with %d columns", k, len(v.Columns))
+			}
 		}
 	} else {
-		cli.Show("[!] No schema specified, will run without table and column validation.")
+		if !FlagErrFormat {
+			cli.Show("[!] No schema specified, will run without table and column validation.")
+		}
 	}
 
 	return &SqlVet{
@@ -118,7 +141,10 @@ func main() {
 				cli.Exit(err)
 			}
 			s.Vet()
-			s.PrintSummary()
+
+			if !FlagErrFormat {
+				s.PrintSummary()
+			}
 
 			if s.ErrCnt > 0 {
 				os.Exit(1)
@@ -127,7 +153,11 @@ func main() {
 		},
 	}
 
-	rootCmd.PersistentFlags().BoolVarP(&cli.Verbose, "verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().BoolVarP(
+		&cli.Verbose, "verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().BoolVarP(
+		&FlagErrFormat, "errorformat", "e", false,
+		"output error in errorformat fromat for easier integration")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
