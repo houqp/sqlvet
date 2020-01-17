@@ -4,9 +4,35 @@ import (
 	"errors"
 	"strconv"
 	"unicode"
-
-	"github.com/jmoiron/sqlx"
 )
+
+// copied from https://github.com/jmoiron/sqlx/blob/2ba0fc60eb4a54030f3a6d73ff0a047349c7eeca/bind.go
+
+// Bindvar types supported by Rebind, BindMap and BindStruct.
+const (
+	UNKNOWN = iota
+	QUESTION
+	DOLLAR
+	NAMED
+	AT
+)
+
+// BindType returns the bindtype for a given database given a drivername.
+func BindType(driverName string) int {
+	switch driverName {
+	case "postgres", "pgx", "pq-timeouts", "cloudsqlpostgres", "ql":
+		return DOLLAR
+	case "mysql":
+		return QUESTION
+	case "sqlite3":
+		return QUESTION
+	case "oci8", "ora", "goracle":
+		return NAMED
+	case "sqlserver":
+		return AT
+	}
+	return UNKNOWN
+}
 
 // copied from https://github.com/jmoiron/sqlx/blob/2ba0fc60eb4a54030f3a6d73ff0a047349c7eeca/named.go#L291
 
@@ -56,18 +82,18 @@ func CompileNamedQuery(qs []byte, bindType int) (query string, names []string, e
 			// add a proper bindvar for the bindType
 			switch bindType {
 			// oracle only supports named type bind vars even for positional
-			case sqlx.NAMED:
+			case NAMED:
 				rebound = append(rebound, ':')
 				rebound = append(rebound, name...)
-			case sqlx.QUESTION, sqlx.UNKNOWN:
+			case QUESTION, UNKNOWN:
 				rebound = append(rebound, '?')
-			case sqlx.DOLLAR:
+			case DOLLAR:
 				rebound = append(rebound, '$')
 				for _, b := range strconv.Itoa(currentVar) {
 					rebound = append(rebound, byte(b))
 				}
 				currentVar++
-			case sqlx.AT:
+			case AT:
 				rebound = append(rebound, '@', 'p')
 				for _, b := range strconv.Itoa(currentVar) {
 					rebound = append(rebound, byte(b))

@@ -18,7 +18,6 @@ import (
 	"golang.org/x/tools/go/ssa"
 	"golang.org/x/tools/go/ssa/ssautil"
 
-	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/houqp/sqlvet/pkg/parseutil"
@@ -136,7 +135,7 @@ func handleQuery(ctx VetContext, qs *QuerySite) {
 	// TODO: apply named query resolution based on v.X type and v.Sel.Name
 	// e.g. for sqlx, only apply to NamedExec and NamedQuery
 	qs.Query, _, qs.Err = parseutil.CompileNamedQuery(
-		[]byte(qs.Query), sqlx.BindType("postgres"))
+		[]byte(qs.Query), parseutil.BindType("postgres"))
 	if qs.Err != nil {
 		return
 	}
