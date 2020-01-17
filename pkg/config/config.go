@@ -10,12 +10,14 @@ import (
 	"github.com/houqp/sqlvet/pkg/vet"
 )
 
+// Sqlvet project config
 type Config struct {
 	DbEngine        string               `toml:"db_engine"`
 	SchemaPath      string               `toml:"schema_path"`
 	SqlFuncMatchers []vet.SqlFuncMatcher `toml:"sqlfunc_matchers"`
 }
 
+// Load sqlvet config from project root
 func Load(searchPath string) (conf Config, err error) {
 	configPath := filepath.Join(searchPath, "sqlvet.toml")
 

@@ -15,13 +15,14 @@ import (
 	"github.com/houqp/sqlvet/pkg/vet"
 )
 
-const Version = "1.0.0"
+const version = "1.1.1"
 
 var (
-	FlagErrFormat = false
+	flagErrFormat = false
 )
 
-type SqlVet struct {
+// SQLVet includes Everything needed for check actions
+type SQLVet struct {
 	QueryCnt int32
 	ErrCnt   int32
 
@@ -30,12 +31,13 @@ type SqlVet struct {
 	Schema      *schema.Db
 }
 
-func (s *SqlVet) reportError(format string, a ...interface{}) {
+func (s *SQLVet) reportError(format string, a ...interface{}) {
 	cli.Error(format, a...)
 	atomic.AddInt32(&s.ErrCnt, 1)
 }
 
-func (s *SqlVet) Vet() {
+// Vet performs static analysis
+func (s *SQLVet) Vet() {
 	queries, err := vet.CheckDir(
 		vet.VetContext{
 			Schema: s.Schema,
@@ -58,7 +60,7 @@ func (s *SqlVet) Vet() {
 		}
 
 		// an error in the query is detected
-		if FlagErrFormat {
+		if flagErrFormat {
 			relFilePath, err := filepath.Rel(s.ProjectRoot, q.Position.Filename)
 			if err != nil {
 				relFilePath = s.ProjectRoot
@@ -83,7 +85,8 @@ func (s *SqlVet) Vet() {
 	}
 }
 
-func (s *SqlVet) PrintSummary() {
+// PrintSummary dumps analysis stats into stdout
+func (s *SQLVet) PrintSummary() {
 	cli.Show("Checked %d SQL queries.", s.QueryCnt)
 	if s.ErrCnt == 0 {
 		cli.Success("🎉 Everything is awesome!")
@@ -92,7 +95,8 @@ func (s *SqlVet) PrintSummary() {
 	}
 }
 
-func NewSqlVet(projectRoot string) (*SqlVet, error) {
+// NewSQLVet creates SQLVet for a given project dir
+func NewSQLVet(projectRoot string) (*SQLVet, error) {
 	cfg, err := config.Load(projectRoot)
 	if err != nil {
 		return nil, err
@@ -104,19 +108,19 @@ func NewSqlVet(projectRoot string) (*SqlVet, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !FlagErrFormat {
+		if !flagErrFormat {
 			cli.Show("Loaded DB schema from %s", cfg.SchemaPath)
 			for k, v := range dbSchema.Tables {
 				cli.Show("\ttable %s with %d columns", k, len(v.Columns))
 			}
 		}
 	} else {
-		if !FlagErrFormat {
+		if !flagErrFormat {
 			cli.Show("[!] No schema specified, will run without table and column validation.")
 		}
 	}
 
-	return &SqlVet{
+	return &SQLVet{
 		Cfg:         cfg,
 		ProjectRoot: projectRoot,
 		Schema:      dbSchema,
@@ -128,7 +132,7 @@ func main() {
 		Use:     "sqlvet PATH",
 		Short:   "Go fearless SQL",
 		Args:    cobra.ExactArgs(1),
-		Version: Version,
+		Version: version,
 		PreRun: func(cmd *cobra.Command, args []string) {
 			if cli.Verbose {
 				log.SetLevel(log.DebugLevel)
@@ -136,13 +140,13 @@ func main() {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			projectRoot := args[0]
-			s, err := NewSqlVet(projectRoot)
+			s, err := NewSQLVet(projectRoot)
 			if err != nil {
 				cli.Exit(err)
 			}
 			s.Vet()
 
-			if !FlagErrFormat {
+			if !flagErrFormat {
 				s.PrintSummary()
 			}
 
@@ -156,7 +160,7 @@ func main() {
 	rootCmd.PersistentFlags().BoolVarP(
 		&cli.Verbose, "verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().BoolVarP(
-		&FlagErrFormat, "errorformat", "e", false,
+		&flagErrFormat, "errorformat", "e", false,
 		"output error in errorformat fromat for easier integration")
 
 	if err := rootCmd.Execute(); err != nil {

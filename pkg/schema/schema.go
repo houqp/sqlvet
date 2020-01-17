@@ -1,10 +1,12 @@
 package schema
 
+// Column represents a column in table
 type Column struct {
 	Name string
 	Type string
 }
 
+// Table represents a table in database
 type Table struct {
 	Name    string
 	Columns map[string]Column
