@@ -316,37 +316,37 @@ func validateInsertValues(ctx VetContext, cols []ColumnUsed, vals []nodes.Node) 
 
 func parseWindowDef(ctx VetContext, winDef *nodes.WindowDef, parseRe *ParseResult) error {
 	if len(winDef.PartitionClause.Items) > 0 {
-		if err := parseQualifications(ctx, winDef.PartitionClause, parseRe); err != nil {
+		if err := parseExpression(ctx, winDef.PartitionClause, parseRe); err != nil {
 			return err
 		}
 	}
 	if len(winDef.OrderClause.Items) > 0 {
-		if err := parseQualifications(ctx, winDef.OrderClause, parseRe); err != nil {
+		if err := parseExpression(ctx, winDef.OrderClause, parseRe); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func parseQualifications(ctx VetContext, clause nodes.Node, parseRe *ParseResult) error {
+func parseExpression(ctx VetContext, clause nodes.Node, parseRe *ParseResult) error {
 	switch expr := clause.(type) {
 	case nodes.A_Expr:
 		if expr.Lexpr != nil {
-			err := parseQualifications(ctx, expr.Lexpr, parseRe)
+			err := parseExpression(ctx, expr.Lexpr, parseRe)
 			if err != nil {
 				return err
 			}
 		}
 		if expr.Rexpr != nil {
-			err := parseQualifications(ctx, expr.Rexpr, parseRe)
+			err := parseExpression(ctx, expr.Rexpr, parseRe)
 			if err != nil {
 				return err
 			}
 		}
 	case nodes.BoolExpr:
-		return parseQualifications(ctx, expr.Args, parseRe)
+		return parseExpression(ctx, expr.Args, parseRe)
 	case nodes.NullTest:
-		return parseQualifications(ctx, expr.Arg, parseRe)
+		return parseExpression(ctx, expr.Arg, parseRe)
 	case nodes.ColumnRef:
 		cu := columnRefToColumnUsed(expr)
 		if cu == nil {
@@ -361,23 +361,23 @@ func parseQualifications(ctx VetContext, clause nodes.Node, parseRe *ParseResult
 	case nodes.FuncCall:
 		// WHERE date=NOW()
 		// WHERE MAX(id) > 1
-		if err := parseQualifications(ctx, expr.Args, parseRe); err != nil {
+		if err := parseExpression(ctx, expr.Args, parseRe); err != nil {
 			return err
 		}
 		// SELECT ROW_NUMBER() OVER (PARTITION BY id)
 		if expr.Over != nil {
-			err := parseQualifications(ctx, expr.Over, parseRe)
+			err := parseExpression(ctx, expr.Over, parseRe)
 			if err != nil {
 				return err
 			}
 		}
 	case nodes.TypeCast:
 		// WHERE foo=True
-		return parseQualifications(ctx, expr.Arg, parseRe)
+		return parseExpression(ctx, expr.Arg, parseRe)
 	case nodes.List:
 		// WHERE id IN (1, 2, 3)
 		for _, item := range expr.Items {
-			err := parseQualifications(ctx, item, parseRe)
+			err := parseExpression(ctx, item, parseRe)
 			if err != nil {
 				return err
 			}
@@ -397,13 +397,13 @@ func parseQualifications(ctx VetContext, clause nodes.Node, parseRe *ParseResult
 			AddQueryParams(&parseRe.Params, queryParams)
 		}
 	case nodes.CoalesceExpr:
-		return parseQualifications(ctx, expr.Args, parseRe)
+		return parseExpression(ctx, expr.Args, parseRe)
 	case *nodes.WindowDef:
 		return parseWindowDef(ctx, expr, parseRe)
 	case nodes.WindowDef:
 		return parseWindowDef(ctx, &expr, parseRe)
 	case nodes.SortBy:
-		return parseQualifications(ctx, expr.Node, parseRe)
+		return parseExpression(ctx, expr.Node, parseRe)
 	default:
 		return fmt.Errorf(
 			"Unsupported expression, found node of type: %v",
@@ -416,7 +416,7 @@ func parseQualifications(ctx VetContext, clause nodes.Node, parseRe *ParseResult
 
 // find used column names from where clause
 func parseWhereClause(ctx VetContext, clause nodes.Node, parseRe *ParseResult) error {
-	err := parseQualifications(ctx, clause, parseRe)
+	err := parseExpression(ctx, clause, parseRe)
 	if err != nil {
 		err = fmt.Errorf("Invalid WHERE clause: %w", err)
 	}
@@ -466,7 +466,7 @@ func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) ([]QueryParam, er
 		}
 
 		re := &ParseResult{}
-		err := parseQualifications(ctx, target.Val, re)
+		err := parseExpression(ctx, target.Val, re)
 		if err != nil {
 			return nil, err
 		}
@@ -500,7 +500,7 @@ func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) ([]QueryParam, er
 
 	if stmt.HavingClause != nil {
 		re := &ParseResult{}
-		err := parseQualifications(ctx, stmt.HavingClause, re)
+		err := parseExpression(ctx, stmt.HavingClause, re)
 		if err != nil {
 			return nil, err
 		}
@@ -514,7 +514,7 @@ func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) ([]QueryParam, er
 
 	if len(stmt.WindowClause.Items) > 0 {
 		re := &ParseResult{}
-		err := parseQualifications(ctx, stmt.WindowClause, re)
+		err := parseExpression(ctx, stmt.WindowClause, re)
 		if err != nil {
 			return nil, err
 		}
@@ -610,7 +610,7 @@ func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) ([]QueryParam, er
 		 */
 		for _, node := range selectStmt.ValuesLists[0] {
 			re := &ParseResult{}
-			err := parseQualifications(ctx, node, re)
+			err := parseExpression(ctx, node, re)
 			if err != nil {
 				return nil, fmt.Errorf("Invalid value list: %w", err)
 			}
