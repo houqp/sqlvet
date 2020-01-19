@@ -316,19 +316,13 @@ func validateInsertValues(ctx VetContext, cols []ColumnUsed, vals []nodes.Node) 
 
 func parseWindowDef(ctx VetContext, winDef *nodes.WindowDef, parseRe *ParseResult) error {
 	if len(winDef.PartitionClause.Items) > 0 {
-		for _, item := range winDef.PartitionClause.Items {
-			err := parseQualifications(ctx, item, parseRe)
-			if err != nil {
-				return err
-			}
+		if err := parseQualifications(ctx, winDef.PartitionClause, parseRe); err != nil {
+			return err
 		}
 	}
 	if len(winDef.OrderClause.Items) > 0 {
-		for _, item := range winDef.OrderClause.Items {
-			err := parseQualifications(ctx, item, parseRe)
-			if err != nil {
-				return err
-			}
+		if err := parseQualifications(ctx, winDef.OrderClause, parseRe); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -350,12 +344,7 @@ func parseQualifications(ctx VetContext, clause nodes.Node, parseRe *ParseResult
 			}
 		}
 	case nodes.BoolExpr:
-		for _, arg := range expr.Args.Items {
-			err := parseQualifications(ctx, arg, parseRe)
-			if err != nil {
-				return err
-			}
-		}
+		return parseQualifications(ctx, expr.Args, parseRe)
 	case nodes.NullTest:
 		return parseQualifications(ctx, expr.Arg, parseRe)
 	case nodes.ColumnRef:
@@ -372,11 +361,8 @@ func parseQualifications(ctx VetContext, clause nodes.Node, parseRe *ParseResult
 	case nodes.FuncCall:
 		// WHERE date=NOW()
 		// WHERE MAX(id) > 1
-		for _, item := range expr.Args.Items {
-			err := parseQualifications(ctx, item, parseRe)
-			if err != nil {
-				return err
-			}
+		if err := parseQualifications(ctx, expr.Args, parseRe); err != nil {
+			return err
 		}
 		// SELECT ROW_NUMBER() OVER (PARTITION BY id)
 		if expr.Over != nil {
@@ -411,12 +397,7 @@ func parseQualifications(ctx VetContext, clause nodes.Node, parseRe *ParseResult
 			AddQueryParams(&parseRe.Params, queryParams)
 		}
 	case nodes.CoalesceExpr:
-		for _, item := range expr.Args.Items {
-			err := parseQualifications(ctx, item, parseRe)
-			if err != nil {
-				return err
-			}
-		}
+		return parseQualifications(ctx, expr.Args, parseRe)
 	case *nodes.WindowDef:
 		return parseWindowDef(ctx, expr, parseRe)
 	case nodes.WindowDef:
@@ -425,7 +406,7 @@ func parseQualifications(ctx VetContext, clause nodes.Node, parseRe *ParseResult
 		return parseQualifications(ctx, expr.Node, parseRe)
 	default:
 		return fmt.Errorf(
-			"Unsupported qualification, found node of type: %v",
+			"Unsupported expression, found node of type: %v",
 			reflect.TypeOf(clause),
 		)
 	}
