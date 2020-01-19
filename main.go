@@ -18,6 +18,7 @@ import (
 const version = "1.1.1"
 
 var (
+	gitCommit     = "?"
 	flagErrFormat = false
 )
 
@@ -132,7 +133,7 @@ func main() {
 		Use:     "sqlvet PATH",
 		Short:   "Go fearless SQL",
 		Args:    cobra.ExactArgs(1),
-		Version: version,
+		Version: fmt.Sprintf("%s (%s)", version, gitCommit),
 		PreRun: func(cmd *cobra.Command, args []string) {
 			if cli.Verbose {
 				log.SetLevel(log.DebugLevel)

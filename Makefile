@@ -9,6 +9,7 @@ cover:
 
 # release:
 # 	gox -output "dist/sqlvet_{{.OS}}_{{.Arch}}" \
+# 		-ldflags "-X main.gitCommit=`git rev-list -1 HEAD`" \
 # 		-osarch="linux/amd64" \
 # 		-osarch="windows/amd64" \
 # 		-osarch="freebsd/amd64" \
