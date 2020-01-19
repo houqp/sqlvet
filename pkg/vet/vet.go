@@ -314,6 +314,26 @@ func validateInsertValues(ctx VetContext, cols []ColumnUsed, vals []nodes.Node) 
 	return nil
 }
 
+func parseWindowDef(ctx VetContext, winDef *nodes.WindowDef, parseRe *ParseResult) error {
+	if len(winDef.PartitionClause.Items) > 0 {
+		for _, item := range winDef.PartitionClause.Items {
+			err := parseQualifications(ctx, item, parseRe)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if len(winDef.OrderClause.Items) > 0 {
+		for _, item := range winDef.OrderClause.Items {
+			err := parseQualifications(ctx, item, parseRe)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func parseQualifications(ctx VetContext, clause nodes.Node, parseRe *ParseResult) error {
 	switch expr := clause.(type) {
 	case nodes.A_Expr:
@@ -358,6 +378,13 @@ func parseQualifications(ctx VetContext, clause nodes.Node, parseRe *ParseResult
 				return err
 			}
 		}
+		// SELECT ROW_NUMBER() OVER (PARTITION BY id)
+		if expr.Over != nil {
+			err := parseQualifications(ctx, expr.Over, parseRe)
+			if err != nil {
+				return err
+			}
+		}
 	case nodes.TypeCast:
 		// WHERE foo=True
 		return parseQualifications(ctx, expr.Arg, parseRe)
@@ -390,6 +417,12 @@ func parseQualifications(ctx VetContext, clause nodes.Node, parseRe *ParseResult
 				return err
 			}
 		}
+	case *nodes.WindowDef:
+		return parseWindowDef(ctx, expr, parseRe)
+	case nodes.WindowDef:
+		return parseWindowDef(ctx, &expr, parseRe)
+	case nodes.SortBy:
+		return parseQualifications(ctx, expr.Node, parseRe)
 	default:
 		return fmt.Errorf(
 			"Unsupported qualification, found node of type: %v",
@@ -451,15 +484,16 @@ func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) ([]QueryParam, er
 			continue
 		}
 
-		switch targetVal := target.Val.(type) {
-		case nodes.ColumnRef:
-			cu := columnRefToColumnUsed(targetVal)
-			if cu == nil {
-				continue
-			}
-			usedCols = append(usedCols, *cu)
-		default:
-			// do nothing if no column is referenced
+		re := &ParseResult{}
+		err := parseQualifications(ctx, target.Val, re)
+		if err != nil {
+			return nil, err
+		}
+		if len(re.Columns) > 0 {
+			usedCols = append(usedCols, re.Columns...)
+		}
+		if len(re.Params) > 0 {
+			AddQueryParams(&queryParams, re.Params)
 		}
 	}
 
@@ -495,6 +529,16 @@ func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) ([]QueryParam, er
 		if len(re.Params) > 0 {
 			AddQueryParams(&queryParams, re.Params)
 		}
+	}
+
+	if len(stmt.WindowClause.Items) > 0 {
+		re := &ParseResult{}
+		err := parseQualifications(ctx, stmt.WindowClause, re)
+		if err != nil {
+			return nil, err
+		}
+		usedCols = append(usedCols, re.Columns...)
+		AddQueryParams(&queryParams, re.Params)
 	}
 
 	if len(stmt.SortClause.Items) > 0 {
@@ -539,12 +583,8 @@ func validateUpdateStmt(ctx VetContext, stmt nodes.UpdateStmt) ([]QueryParam, er
 		if err != nil {
 			return nil, err
 		}
-		if len(re.Columns) > 0 {
-			usedCols = append(usedCols, re.Columns...)
-		}
-		if len(re.Params) > 0 {
-			AddQueryParams(&queryParams, re.Params)
-		}
+		usedCols = append(usedCols, re.Columns...)
+		AddQueryParams(&queryParams, re.Params)
 	}
 
 	if len(stmt.ReturningList.Items) > 0 {

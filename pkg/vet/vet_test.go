@@ -318,6 +318,16 @@ func TestInvalidSelect(t *testing.T) {
 			`SELECT DISTINCT oops, value, id FROM foo`,
 			errors.New("column `oops` is not defined in table `foo`"),
 		},
+		{
+			"invalid column in window",
+			`SELECT ROW_NUMBER() OVER (PARTITION BY oops ORDER BY value) FROM foo`,
+			errors.New("column `oops` is not defined in table `foo`"),
+		},
+		{
+			"invalid column in window clause",
+			`SELECT wf() OVER w FROM foo WINDOW w AS (PARTITION BY value ORDER BY oops)`,
+			errors.New("column `oops` is not defined in table `foo`"),
+		},
 	}
 
 	for _, tcase := range testCases {
