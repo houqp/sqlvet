@@ -1,0 +1,58 @@
+---
+name: "Release a tag"
+on:
+  release:
+    types: [created]
+jobs:
+  release-darwin-amd64:
+    name: release darwin/amd64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.15.0'
+      - run: go build
+      - run: echo ::set-output name=RELEASE_VERSION::${GITHUB_REF#refs/*/}
+        id: get_tag_name
+      - run: tar -czf "sqlvet-${{ steps.get_tag_name.outputs.RELEASE_VERSION }}-darwin-amd64.tar.gz" "sqlvet";
+      - name: Get release
+        id: get_release
+        uses: bruceadams/get-release@v1.2.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_release.outputs.upload_url }}
+          asset_path: ./sqlvet-${{ steps.get_tag_name.outputs.RELEASE_VERSION }}-darwin-amd64.tar.gz
+          asset_name: sqlvet-${{ steps.get_tag_name.outputs.RELEASE_VERSION }}-darwin-amd64.tar.gz
+          asset_content_type: application/octet-stream
+  release-linux-amd64:
+    name: release linux/amd64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.15.0'
+      - run: go build -ldflags '-w -extldflags "-static"'
+      - run: echo ::set-output name=RELEASE_VERSION::${GITHUB_REF#refs/*/}
+        id: get_tag_name
+      - name: Get release
+        id: get_release
+        uses: bruceadams/get-release@v1.2.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: tar -czf "sqlvet-${{ steps.get_tag_name.outputs.RELEASE_VERSION }}-linux-amd64.tar.gz" "sqlvet";
+      - name: Upload binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.get_release.outputs.upload_url }}
+          asset_path: ./sqlvet-${{ steps.get_tag_name.outputs.RELEASE_VERSION }}-linux-amd64.tar.gz
+          asset_name: sqlvet-${{ steps.get_tag_name.outputs.RELEASE_VERSION }}-linux-amd64.tar.gz
+          asset_content_type: application/octet-stream
