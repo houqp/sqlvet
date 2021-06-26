@@ -2,7 +2,7 @@
 
 [![goreportcard](https://goreportcard.com/badge/github.com/houqp/sqlvet)](https://goreportcard.com/report/github.com/houqp/sqlvet)
 [![codecov](https://codecov.io/gh/houqp/sqlvet/branch/master/graphs/badge.svg?branch=master)](https://codecov.io/gh/houqp/sqlvet)
-[![CircleCI](https://circleci.com/gh/houqp/sqlvet.svg?style=svg)](https://circleci.com/gh/houqp/sqlvet)
+[![build-status](https://github.com/houqp/sqlvet/workflows/build/badge.svg)](https://github.com/houqp/sqlvet/actions)
 
 Sqlvet performs static analysis on raw SQL queries in your Go code base to
 surface potential runtime errors at build time.

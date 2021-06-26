@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 
 	"golang.org/x/tools/go/callgraph"
 	"golang.org/x/tools/go/packages"
@@ -453,7 +454,16 @@ func getSortedIgnoreNodes(pkgs []*packages.Package) []ast.Node {
 			cmap := ast.NewCommentMap(p.Fset, s, s.Comments)
 			for node, cglist := range cmap {
 				for _, cg := range cglist {
-					ctext := cg.Text()
+					// Remove `//` and spaces from comment line to get the
+					// actual comment text. We can't use cg.Text() directly
+					// here due to change introduced in
+					// https://github.com/golang/go/issues/37974
+					ctext := cg.List[0].Text
+					if !strings.HasPrefix(ctext, "//") {
+						continue
+					}
+					ctext = strings.TrimSpace(ctext[2:])
+
 					anno, err := ParseComment(ctext)
 					if err != nil {
 						continue
