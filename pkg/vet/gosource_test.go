@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/houqp/sqlvet/pkg/vet"
+	"golang.org/x/tools/go/analysis/analysistest"
 )
 
 type GoSourceTmpDir struct{}
@@ -46,32 +47,21 @@ func (s *GoSourceTests) Teardown(t *testing.T)   {}
 func (s *GoSourceTests) BeforeEach(t *testing.T) {}
 func (s *GoSourceTests) AfterEach(t *testing.T)  {}
 
-func (s *GoSourceTests) SubTestInvalidSyntax(t *testing.T, fixtures struct {
-	TmpDir string `fixture:"GoSourceTmpDir"`
-}) {
-	dir := fixtures.TmpDir
-
-	fpath := filepath.Join(dir, "main.go")
-	err := ioutil.WriteFile(fpath, []byte(`
-package main
-
-func main() {
-	return 1
-}
-`), 0644)
-	assert.NoError(t, err)
-
-	_, err = vet.CheckDir(vet.VetContext{}, dir, nil)
-	assert.Error(t, err)
+func (s *GoSourceTests) runAnalyzer(t *testing.T, dir, packageName string) []*vet.QuerySite {
+	var result []*vet.QuerySite
+	analyzer := vet.NewAnalyzer(vet.VetContext{}, nil, func(r *vet.QuerySite) {
+		result = append(result, r)
+	})
+	analysistest.Run(t, dir, analyzer, packageName)
+	return result
 }
 
 func (s *GoSourceTests) SubTestSkipNoneDbQueryCall(t *testing.T, fixtures struct {
 	TmpDir string `fixture:"GoSourceTmpDir"`
 }) {
-	dir := fixtures.TmpDir
 
-	source := []byte(`
-package main
+	dir, cleanup, err := analysistest.WriteFiles(map[string]string{
+		"main/main.go": `package main
 
 type Parameter struct {}
 
@@ -99,15 +89,11 @@ func main() {
 		}()
 	}()
 }
-	`)
-
-	fpath := filepath.Join(dir, "main.go")
-	err := ioutil.WriteFile(fpath, source, 0644)
+	`})
 	assert.NoError(t, err)
+	defer cleanup()
 
-	queries, err := vet.CheckDir(vet.VetContext{}, dir, nil)
-	assert.NoError(t, err)
-	assert.Equal(t, 0, len(queries))
+	_ = s.runAnalyzer(t, dir, "main")
 }
 
 func (s *GoSourceTests) SubTestPkgDatabaseSql(t *testing.T, fixtures struct {
@@ -115,8 +101,8 @@ func (s *GoSourceTests) SubTestPkgDatabaseSql(t *testing.T, fixtures struct {
 }) {
 	dir := fixtures.TmpDir
 
-	source := []byte(`
-package main
+	dir, cleanup, err := analysistest.WriteFiles(map[string]string{
+		"main/main.go": `package main
 
 import (
 	"context"
@@ -151,23 +137,18 @@ func main() {
 	var userInput string
 	tx.Query(fmt.Sprintf("SELECT %s", userInput))
 
-	// string concat
-	tx.Exec("SELECT " + "7")
-	staticUserId := "id"
-	tx.Exec("SELECT " + staticUserId + " FROM foo")
+  // const string
+	tx, _ = db.Begin()
+  const query = "SELECT 7"
+	tx.ExecContext(ctx, query)
 }
-	`)
-
-	fpath := filepath.Join(dir, "main.go")
-	err := ioutil.WriteFile(fpath, source, 0644)
+	`})
 	assert.NoError(t, err)
+	defer cleanup()
 
-	queries, err := vet.CheckDir(vet.VetContext{}, dir, nil)
-	if err != nil {
-		t.Fatalf("Failed to load package: %s", err.Error())
-		return
-	}
-	assert.Equal(t, 6, len(queries))
+	queries := s.runAnalyzer(t, dir, "main")
+
+	assert.Equal(t, 5, len(queries))
 	sort.Slice(queries, func(i, j int) bool {
 		return queries[i].Position.Offset < queries[j].Position.Offset
 	})
@@ -184,54 +165,14 @@ func main() {
 	// unsafe string
 	assert.Error(t, queries[3].Err)
 
-	// string concat
 	assert.NoError(t, queries[4].Err)
 	assert.Equal(t, "SELECT 7", queries[4].Query)
-	assert.NoError(t, queries[5].Err)
-	assert.Equal(t, "SELECT id FROM foo", queries[5].Query)
-}
-
-// run sqlvet from parent dir
-func (s *GoSourceTests) SubTestCheckRelativeDir(t *testing.T, fixtures struct {
-	TmpDir string `fixture:"GoSourceTmpDir"`
-}) {
-	dir := fixtures.TmpDir
-
-	source := []byte(`
-package main
-
-func main() {
-}
-	`)
-
-	fpath := filepath.Join(dir, "main.go")
-	err := ioutil.WriteFile(fpath, source, 0644)
-	assert.NoError(t, err)
-
-	cwd, err := os.Getwd()
-	assert.NoError(t, err)
-	parentDir := filepath.Dir(dir)
-	os.Chdir(parentDir)
-	defer os.Chdir(cwd)
-
-	queries, err := vet.CheckDir(vet.VetContext{}, filepath.Base(dir), nil)
-	if err != nil {
-		t.Fatalf("Failed to load package: %s", err.Error())
-		return
-	}
-	assert.Equal(t, 0, len(queries))
-}
-
-func TestGoSource(t *testing.T) {
-	gtest.RunSubTests(t, &GoSourceTests{})
 }
 
 func (s *GoSourceTests) SubTestQueryParam(t *testing.T, fixtures struct {
 	TmpDir string `fixture:"GoSourceTmpDir"`
 }) {
-	dir := fixtures.TmpDir
-
-	source := []byte(`
+	const source = `
 package main
 
 import (
@@ -252,17 +193,13 @@ func main() {
 
 	db.Query("SELECT 2 FROM foo WHERE id=$1 OR value=$1", 1)
 }
-	`)
+	`
 
-	fpath := filepath.Join(dir, "main.go")
-	err := ioutil.WriteFile(fpath, source, 0644)
+	dir, cleanup, err := analysistest.WriteFiles(map[string]string{"main/main.go": source})
 	assert.NoError(t, err)
+	defer cleanup()
+	queries := s.runAnalyzer(t, dir, "main")
 
-	queries, err := vet.CheckDir(vet.VetContext{}, dir, nil)
-	if err != nil {
-		t.Fatalf("Failed to load package: %s", err.Error())
-		return
-	}
 	assert.Equal(t, 4, len(queries))
 	sort.Slice(queries, func(i, j int) bool {
 		return queries[i].Position.Offset < queries[j].Position.Offset
@@ -283,4 +220,8 @@ func main() {
 	assert.NoError(t, queries[3].Err)
 	assert.Equal(t, "SELECT 2 FROM foo WHERE id=$1 OR value=$1", queries[3].Query)
 	assert.Equal(t, 1, queries[3].ParameterArgCount)
+}
+
+func TestGoSource(t *testing.T) {
+	gtest.RunSubTests(t, &GoSourceTests{})
 }

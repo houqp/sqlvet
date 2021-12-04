@@ -53,7 +53,7 @@ func (s *ConfigTests) SubTestMultipleMatchers(t *testing.T, fixtures struct {
 `), 0644)
 	assert.NoError(t, err)
 
-	cfg, err := config.Load(fixtures.TmpDir)
+	cfg, err := config.Load(configPath)
 	assert.NoError(t, err)
 
 	assert.Equal(t, 2, len(cfg.SqlFuncMatchers))
@@ -73,7 +73,7 @@ func (s *ConfigTests) SubTestNoConfigFile(t *testing.T, fixtures struct {
 	_, e := os.Stat(configPath)
 	assert.True(t, os.IsNotExist(e))
 
-	cfg, err := config.Load(fixtures.TmpDir)
+	cfg, err := config.Load(configPath)
 	assert.NoError(t, err)
 	assert.Equal(t, config.Config{DbEngine: "postgres"}, cfg)
 }
