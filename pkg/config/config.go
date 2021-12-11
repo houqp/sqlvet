@@ -3,7 +3,6 @@ package config
 import (
 	"io/ioutil"
 	"os"
-	"path/filepath"
 
 	"github.com/pelletier/go-toml"
 
@@ -18,9 +17,7 @@ type Config struct {
 }
 
 // Load sqlvet config from project root
-func Load(searchPath string) (conf Config, err error) {
-	configPath := filepath.Join(searchPath, "sqlvet.toml")
-
+func Load(configPath string) (conf Config, err error) {
 	if _, e := os.Stat(configPath); os.IsNotExist(e) {
 		conf.DbEngine = "postgres"
 		// return default config if not found
