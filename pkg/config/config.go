@@ -14,6 +14,7 @@ import (
 type Config struct {
 	DbEngine        string               `toml:"db_engine"`
 	SchemaPath      string               `toml:"schema_path"`
+	BuildFlags      string               `toml:"build_flags"`
 	SqlFuncMatchers []vet.SqlFuncMatcher `toml:"sqlfunc_matchers"`
 }
 

@@ -44,6 +44,7 @@ func (s *SQLVet) Vet() {
 			Schema: s.Schema,
 		},
 		s.ProjectRoot,
+		s.Cfg.BuildFlags,
 		s.Cfg.SqlFuncMatchers,
 	)
 	if err != nil {

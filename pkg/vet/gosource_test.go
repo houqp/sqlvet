@@ -61,7 +61,7 @@ func main() {
 `), 0644)
 	assert.NoError(t, err)
 
-	_, err = vet.CheckDir(vet.VetContext{}, dir, nil)
+	_, err = vet.CheckDir(vet.VetContext{}, dir, "", nil)
 	assert.Error(t, err)
 }
 
@@ -105,7 +105,7 @@ func main() {
 	err := ioutil.WriteFile(fpath, source, 0644)
 	assert.NoError(t, err)
 
-	queries, err := vet.CheckDir(vet.VetContext{}, dir, nil)
+	queries, err := vet.CheckDir(vet.VetContext{}, dir, "", nil)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, len(queries))
 }
@@ -162,7 +162,7 @@ func main() {
 	err := ioutil.WriteFile(fpath, source, 0644)
 	assert.NoError(t, err)
 
-	queries, err := vet.CheckDir(vet.VetContext{}, dir, nil)
+	queries, err := vet.CheckDir(vet.VetContext{}, dir, "", nil)
 	if err != nil {
 		t.Fatalf("Failed to load package: %s", err.Error())
 		return
@@ -214,7 +214,7 @@ func main() {
 	os.Chdir(parentDir)
 	defer os.Chdir(cwd)
 
-	queries, err := vet.CheckDir(vet.VetContext{}, filepath.Base(dir), nil)
+	queries, err := vet.CheckDir(vet.VetContext{}, filepath.Base(dir), "", nil)
 	if err != nil {
 		t.Fatalf("Failed to load package: %s", err.Error())
 		return
@@ -258,7 +258,7 @@ func main() {
 	err := ioutil.WriteFile(fpath, source, 0644)
 	assert.NoError(t, err)
 
-	queries, err := vet.CheckDir(vet.VetContext{}, dir, nil)
+	queries, err := vet.CheckDir(vet.VetContext{}, dir, "", nil)
 	if err != nil {
 		t.Fatalf("Failed to load package: %s", err.Error())
 		return
@@ -283,4 +283,34 @@ func main() {
 	assert.NoError(t, queries[3].Err)
 	assert.Equal(t, "SELECT 2 FROM foo WHERE id=$1 OR value=$1", queries[3].Query)
 	assert.Equal(t, 1, queries[3].ParameterArgCount)
+}
+
+func (s *GoSourceTests) SubTestBuildFlags(t *testing.T, fixtures struct {
+	TmpDir string `fixture:"GoSourceTmpDir"`
+}) {
+	dir := fixtures.TmpDir
+
+	source := []byte(`
+//+build myBuildTag
+
+package main
+
+import (
+	"fmt"
+)
+
+func main() {
+	fmt.Printf("Hello World\n")
+}
+`)
+
+	fpath := filepath.Join(dir, "main.go")
+	err := ioutil.WriteFile(fpath, source, 0644)
+	assert.NoError(t, err)
+
+	_, err = vet.CheckDir(vet.VetContext{}, dir, "", nil)
+	assert.Error(t, err)
+
+	_, err = vet.CheckDir(vet.VetContext{}, dir, "-tags myBuildTag", nil)
+	assert.NoError(t, err)
 }

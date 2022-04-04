@@ -223,7 +223,7 @@ func getMatchers(extraMatchers []SqlFuncMatcher) []*SqlFuncMatcher {
 	return matchers
 }
 
-func loadGoPackages(dir string) ([]*packages.Package, error) {
+func loadGoPackages(dir string, buildFlags string) ([]*packages.Package, error) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName |
 			packages.NeedFiles |
@@ -234,6 +234,9 @@ func loadGoPackages(dir string) ([]*packages.Package, error) {
 			packages.NeedTypesInfo,
 		Dir: dir,
 		Env: append(os.Environ(), "GO111MODULE=auto"),
+	}
+	if buildFlags != "" {
+		cfg.BuildFlags = strings.Split(buildFlags, " ")
 	}
 	dirAbs, err := filepath.Abs(dir)
 	if err != nil {
@@ -484,13 +487,13 @@ func getSortedIgnoreNodes(pkgs []*packages.Package) []ast.Node {
 	return ignoreNodes
 }
 
-func CheckDir(ctx VetContext, dir string, extraMatchers []SqlFuncMatcher) ([]*QuerySite, error) {
+func CheckDir(ctx VetContext, dir, buildFlags string, extraMatchers []SqlFuncMatcher) ([]*QuerySite, error) {
 	_, err := os.Stat(filepath.Join(dir, "go.mod"))
 	if os.IsNotExist(err) {
 		return nil, errors.New("sqlvet only supports projects using go modules for now.")
 	}
 
-	pkgs, err := loadGoPackages(dir)
+	pkgs, err := loadGoPackages(dir, buildFlags)
 	if err != nil {
 		return nil, err
 	}
@@ -538,6 +541,10 @@ func CheckDir(ctx VetContext, dir string, extraMatchers []SqlFuncMatcher) ([]*Qu
 		Mains:          mains,
 		BuildCallGraph: true,
 	})
+
+	if err != nil {
+		return nil, err
+	}
 
 	queries := []*QuerySite{}
 
