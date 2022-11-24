@@ -9,7 +9,7 @@ import (
 	pg_query "github.com/pganalyze/pg_query_go"
 	nodes "github.com/pganalyze/pg_query_go/nodes"
 
-	"github.com/houqp/sqlvet/pkg/schema"
+	"github.com/samiam2013/sqlvet/pkg/schema"
 )
 
 type VetContext struct {

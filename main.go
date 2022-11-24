@@ -9,10 +9,10 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	"github.com/houqp/sqlvet/pkg/cli"
-	"github.com/houqp/sqlvet/pkg/config"
-	"github.com/houqp/sqlvet/pkg/schema"
-	"github.com/houqp/sqlvet/pkg/vet"
+	"github.com/samiam2013/sqlvet/pkg/cli"
+	"github.com/samiam2013/sqlvet/pkg/config"
+	"github.com/samiam2013/sqlvet/pkg/schema"
+	"github.com/samiam2013/sqlvet/pkg/vet"
 )
 
 const version = "1.1.1"

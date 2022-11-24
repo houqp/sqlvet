@@ -12,8 +12,8 @@ github.com/fatih/structtag v1.2.0 h1:/OdNE99OxoI/PqaW/SuSK9uxxT3f/tcSZgon/ssNSx4
 github.com/fatih/structtag v1.2.0/go.mod h1:mBJUNpUnHmRKrKlQQlmCrh5PuhftFbNv8Ys4/aAZl94=
 github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMoQvtojpjFo=
 github.com/hashicorp/hcl v1.0.0/go.mod h1:E5yfLk+7swimpb2L/Alb/PJmXilQ/rhwaUYs4T20WEQ=
-github.com/houqp/gtest v1.0.0 h1:BEA3kuePC0Q9bDoksoZXCnyYIZGUbMXurjwyv/ql0cA=
-github.com/houqp/gtest v1.0.0/go.mod h1:oxg4BHzN6nRAQZWTc5qO90uK9voXKmb5kg4/XE6lhKw=
+github.com/samiam2013/gtest v1.0.0 h1:BEA3kuePC0Q9bDoksoZXCnyYIZGUbMXurjwyv/ql0cA=
+github.com/samiam2013/gtest v1.0.0/go.mod h1:oxg4BHzN6nRAQZWTc5qO90uK9voXKmb5kg4/XE6lhKw=
 github.com/inconshreveable/mousetrap v1.0.0 h1:Z8tu5sraLXCXIcARxBp/8cbvlwVa7Z1NHg9XEKhtSvM=
 github.com/inconshreveable/mousetrap v1.0.0/go.mod h1:PxqpIevigyE2G7u3NXJIT2ANytuPF1OarO4DADm73n8=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
