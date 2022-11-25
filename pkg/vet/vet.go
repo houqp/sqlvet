@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
-	pg_query "github.com/pganalyze/pg_query_go"
-	nodes "github.com/pganalyze/pg_query_go/nodes"
+	pg_query "github.com/pganalyze/pg_query_go/v2"
 
 	"github.com/samiam2013/sqlvet/pkg/schema"
 )
