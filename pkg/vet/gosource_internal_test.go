@@ -27,7 +27,7 @@ func (s *ExtractQueryStrTests) AfterEach(t *testing.T)  {}
 // 	assert.Equal(t, "SELECT name FROM foo WHERE id=1", s)
 // }
 
-func (s *ExtractQueryStrTests) SubTestQueryStringAsInterface(t *testing.T) {
+func (s *ExtractQueryStrTests) SubTestQueryStringAsInterface(t *testing.T) { 
 	// query string constant is passed in as interface to match query function
 	// signature
 	expectedQs := "SELECT name FROM foo WHERE id=2"

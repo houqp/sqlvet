@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
-	pg_query "github.com/pganalyze/pg_query_go"
-	nodes "github.com/pganalyze/pg_query_go/nodes"
+	pg_query2 "github.com/pganalyze/pg_query_go/v2"
 
 	"github.com/samiam2013/sqlvet/pkg/schema"
 )
@@ -24,11 +23,11 @@ type TableUsed struct {
 type ColumnUsed struct {
 	Column   string
 	Table    string
-	Location int
+	Location int32
 }
 
 type QueryParam struct {
-	Number int
+	Number int32
 	// TODO: also store related column type info for analysis
 }
 
@@ -65,43 +64,48 @@ func AddQueryParams(target *[]QueryParam, params []QueryParam) {
 }
 
 func DebugQuery(q string) {
-	b, _ := pg_query.ParseToJSON(q)
+	b, _ := pg_query2.ParseToJSON(q)
 	var pretty bytes.Buffer
 	json.Indent(&pretty, []byte(b), "\t", "  ")
 	fmt.Println("query: " + q)
-	fmt.Println("parsed query: " + string(pretty.Bytes()))
+	// fmt.Println("parsed query: " + pretty.String())
 }
 
-func rangeVarToTableUsed(r nodes.RangeVar) TableUsed {
+func rangeVarToTableUsed(r *pg_query2.RangeVar) TableUsed {
 	t := TableUsed{
-		Name: *r.Relname,
+		Name: r.Relname,
 	}
 	if r.Alias != nil {
-		t.Alias = *r.Alias.Aliasname
+		t.Alias = r.Alias.Aliasname
 	}
 	return t
 }
 
+/* =========================================================================================================
+	this is where the rewrite to nil checks rather than type refleciton starts
+ ========================================================================================================= */
+
 // return nil if no specific column is being referenced
-func columnRefToColumnUsed(colRef nodes.ColumnRef) *ColumnUsed {
+func columnRefToColumnUsed(colRef *pg_query2.ColumnRef) *ColumnUsed {
 	cu := ColumnUsed{
 		Location: colRef.Location,
 	}
 
-	var colField nodes.Node
-	if len(colRef.Fields.Items) > 1 {
+	var colField *pg_query2.Node
+	if len(colRef.Fields) > 1 {
 		// in the form of SELECT table.column FROM table
-		cu.Table = colRef.Fields.Items[0].(nodes.String).Str
-		colField = colRef.Fields.Items[1]
+		cu.Table = colRef.Fields[0].GetString_().Str
+		// fmt.Printf("table: %s\n", cu.Table)
+		colField = colRef.Fields[1]
 	} else {
 		// in the form of SELECT column FROM table
-		colField = colRef.Fields.Items[0]
+		colField = colRef.Fields[0]
 	}
 
-	switch refField := colField.(type) {
-	case nodes.String:
-		cu.Column = refField.Str
-	case nodes.A_Star:
+	switch {
+	case colField.GetString_() != nil:
+		cu.Column = colField.GetString_().GetStr()
+	case colField.GetAStar() != nil:
 		// SELECT *
 		return nil
 	default:
@@ -112,58 +116,73 @@ func columnRefToColumnUsed(colRef nodes.ColumnRef) *ColumnUsed {
 	return &cu
 }
 
-func getUsedTablesFromJoinArg(arg nodes.Node) []TableUsed {
-	switch n := arg.(type) {
-	case nodes.RangeVar:
-		return []TableUsed{rangeVarToTableUsed(n)}
-	case nodes.JoinExpr:
+func getUsedTablesFromJoinArg(arg *pg_query2.Node) []TableUsed {
+	// switch n := arg.(type) {
+	// case pg_query2.Node_RangeVar:
+	// 	return []TableUsed{rangeVarToTableUsed(n)}
+	// case pg_query2.Node_JoinExpr:
+	// 	return append(
+	// 		getUsedTablesFromJoinArg(n.JoinExpr.Larg),
+	// 		getUsedTablesFromJoinArg(n.JoinExpr.Rarg)...)
+	switch {
+	case arg.GetRangeVar() != nil:
+		return []TableUsed{rangeVarToTableUsed(arg.GetRangeVar())}
+	case arg.GetJoinExpr() != nil:
 		return append(
-			getUsedTablesFromJoinArg(n.Larg),
-			getUsedTablesFromJoinArg(n.Rarg)...)
+			getUsedTablesFromJoinArg(arg.GetJoinExpr().GetLarg()),
+			getUsedTablesFromJoinArg(arg.GetJoinExpr().GetRarg())...)
 	default:
 		return []TableUsed{}
 	}
 }
 
 // extract used tables from FROM clause and JOIN clauses
-func getUsedTablesFromSelectStmt(fromClauseList nodes.List) []TableUsed {
+func getUsedTablesFromSelectStmt(fromClauseList []*pg_query2.Node) []TableUsed {
 	usedTables := []TableUsed{}
 
-	if len(fromClauseList.Items) <= 0 {
+	if len(fromClauseList) <= 0 {
 		// skip because no table is referenced in the query
 		return usedTables
 	}
 
-	for _, fromItem := range fromClauseList.Items {
-		switch fromExpr := fromItem.(type) {
-		case nodes.RangeVar:
+	// var fromItem any
+	for _, fromItem := range fromClauseList {
+		// 	switch fromExpr := fromItem.(type) {
+		// 	case pg_query2.Node_RangeVar:
+		// 		// SELECT without JOIN
+		// 		usedTables = append(usedTables, rangeVarToTableUsed(fromExpr))
+		// 	case pg_query2.Node_JoinExpr:
+		// 		// SELECT with one or more JOINs
+		// 		usedTables = append(usedTables, getUsedTablesFromJoinArg(fromExpr.JoinExpr.Larg)...)
+		// 		usedTables = append(usedTables, getUsedTablesFromJoinArg(fromExpr.JoinExpr.Rarg)...)
+		// 	}
+		switch {
+		case fromItem.GetRangeVar() != nil:
 			// SELECT without JOIN
-			usedTables = append(usedTables, rangeVarToTableUsed(fromExpr))
-		case nodes.JoinExpr:
+			usedTables = append(usedTables, rangeVarToTableUsed(fromItem.GetRangeVar()))
+		case fromItem.GetJoinExpr() != nil:
 			// SELECT with one or more JOINs
-			usedTables = append(usedTables, getUsedTablesFromJoinArg(fromExpr.Larg)...)
-			usedTables = append(usedTables, getUsedTablesFromJoinArg(fromExpr.Rarg)...)
+			usedTables = append(usedTables, getUsedTablesFromJoinArg(fromItem.GetJoinExpr().GetLarg())...)
+			usedTables = append(usedTables, getUsedTablesFromJoinArg(fromItem.GetJoinExpr().GetRarg())...)
 		}
 	}
 
 	return usedTables
 }
 
-func getUsedColumnsFromJoinQuals(quals nodes.Node) []ColumnUsed {
+func getUsedColumnsFromJoinQuals(quals *pg_query2.Node) []ColumnUsed {
 	usedCols := []ColumnUsed{}
 
-	switch joinCond := quals.(type) {
-	case nodes.A_Expr:
-		lcolRef, ok := joinCond.Lexpr.(nodes.ColumnRef)
-		if ok {
-			cu := columnRefToColumnUsed(lcolRef)
+	if quals.GetAExpr() != nil {
+		joinCond := quals.GetAExpr()
+		if lColRef := joinCond.GetLexpr().GetColumnRef(); lColRef != nil {
+			cu := columnRefToColumnUsed(lColRef)
 			if cu != nil {
 				usedCols = append(usedCols, *cu)
 			}
 		}
-		rcolRef, ok := joinCond.Rexpr.(nodes.ColumnRef)
-		if ok {
-			cu := columnRefToColumnUsed(rcolRef)
+		if rColRef := joinCond.GetRexpr().GetColumnRef(); rColRef != nil {
+			cu := columnRefToColumnUsed(rColRef)
 			if cu != nil {
 				usedCols = append(usedCols, *cu)
 			}
@@ -173,59 +192,66 @@ func getUsedColumnsFromJoinQuals(quals nodes.Node) []ColumnUsed {
 	return usedCols
 }
 
-func getUsedColumnsFromJoinExpr(expr nodes.JoinExpr) []ColumnUsed {
+// todo this rewrite seems especially dubious
+func getUsedColumnsFromJoinExpr(expr *pg_query2.Node) []ColumnUsed {
 	usedCols := []ColumnUsed{}
-
-	if larg, ok := expr.Larg.(nodes.JoinExpr); ok {
+	if expr.GetJoinExpr() == nil {
+		return usedCols
+	}
+	joinExpr := expr.GetJoinExpr()
+	if larg := joinExpr.Larg; larg != nil {
 		usedCols = append(usedCols, getUsedColumnsFromJoinExpr(larg)...)
 	}
-	if rarg, ok := expr.Rarg.(nodes.JoinExpr); ok {
+	if rarg := joinExpr.Rarg; rarg != nil {
 		usedCols = append(usedCols, getUsedColumnsFromJoinExpr(rarg)...)
 	}
-	usedCols = append(usedCols, getUsedColumnsFromJoinQuals(expr.Quals)...)
+	usedCols = append(usedCols, getUsedColumnsFromJoinQuals(joinExpr.Quals)...)
 
 	return usedCols
 }
 
-func getUsedColumnsFromJoinClauses(fromClauseList nodes.List) []ColumnUsed {
+func getUsedColumnsFromJoinClauses(fromClauseList []*pg_query2.Node) []ColumnUsed {
 	usedCols := []ColumnUsed{}
 
-	if len(fromClauseList.Items) <= 0 {
+	if len(fromClauseList) <= 0 {
 		// skip because no table is referenced in the query, which means there
 		// is no Join clause
 		return usedCols
 	}
 
-	for _, fromItem := range fromClauseList.Items {
-		switch fromExpr := fromItem.(type) {
-		case nodes.RangeVar:
+	for _, fromItem := range fromClauseList {
+		switch {
+		case fromItem.GetRangeVar() != nil:
 			// SELECT without JOIN
 			continue
-		case nodes.JoinExpr:
+		case fromItem.GetJoinExpr() != nil:
 			// SELECT with one or more JOINs
-			usedCols = append(usedCols, getUsedColumnsFromJoinExpr(fromExpr)...)
+			usedCols = append(usedCols, getUsedColumnsFromJoinExpr(fromItem)...)
 		}
 	}
 
 	return usedCols
 }
 
-func getUsedColumnsFromReturningList(returningList nodes.List) []ColumnUsed {
+func getUsedColumnsFromReturningList(returningList []*pg_query2.Node) []ColumnUsed {
 	usedCols := []ColumnUsed{}
 
-	for _, node := range returningList.Items {
-		target, ok := node.(nodes.ResTarget)
-		if !ok {
+	for _, node := range returningList {
+		target := node.GetResTarget()
+		if target == nil {
 			continue
 		}
 
-		switch targetVal := target.Val.(type) {
-		case nodes.ColumnRef:
-			cu := columnRefToColumnUsed(targetVal)
+		switch {
+		// case pg_query2.ColumnRef:
+		case target.Val.GetColumnRef() != nil:
+			cu := columnRefToColumnUsed(target.Val.GetColumnRef())
+			fmt.Println("column used: ", cu)
 			if cu == nil {
 				continue
 			}
 			usedCols = append(usedCols, *cu)
+			fmt.Println("added column to usedCols: ", cu)
 		default:
 			// do nothing if no column is referenced
 		}
@@ -302,133 +328,163 @@ func validateTableColumns(ctx VetContext, tables []TableUsed, cols []ColumnUsed)
 	return nil
 }
 
-func validateInsertValues(ctx VetContext, cols []ColumnUsed, vals []nodes.Node) error {
+func validateInsertValues(ctx VetContext, cols []ColumnUsed, vals []*pg_query2.Node) error {
 	colCnt := len(cols)
 	// val could be nodes.ParamRef
 	valCnt := len(vals)
 
 	if colCnt != valCnt {
-		return fmt.Errorf("Column count %d doesn't match value count %d.", colCnt, valCnt)
+		return fmt.Errorf("column count %d doesn't match value count %d", colCnt, valCnt)
 	}
 
 	return nil
 }
 
-func parseWindowDef(ctx VetContext, winDef *nodes.WindowDef, parseRe *ParseResult) error {
-	if len(winDef.PartitionClause.Items) > 0 {
-		if err := parseExpression(ctx, winDef.PartitionClause, parseRe); err != nil {
+func parseWindowDef(ctx VetContext, winDef *pg_query2.WindowDef, parseRe *ParseResult) error {
+	print("parseWindowDef: ", winDef)
+	if len(winDef.PartitionClause) > 0 {
+		// TODO should this be [0]
+		if err := parseExpression(ctx, winDef.GetPartitionClause()[0], parseRe); err != nil {
 			return err
 		}
 	}
-	if len(winDef.OrderClause.Items) > 0 {
-		if err := parseExpression(ctx, winDef.OrderClause, parseRe); err != nil {
+	if len(winDef.OrderClause) > 0 {
+		// TODO should this be [0]
+		if err := parseExpression(ctx, winDef.OrderClause[0], parseRe); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func parseExpression(ctx VetContext, clause nodes.Node, parseRe *ParseResult) error {
-	switch expr := clause.(type) {
-	case nodes.A_Expr:
-		if expr.Lexpr != nil {
-			err := parseExpression(ctx, expr.Lexpr, parseRe)
+// recursive function to parse expressions including nested expressions
+func parseExpression(ctx VetContext, clause *pg_query2.Node, parseRe *ParseResult) error {
+	switch {
+	case clause.GetAExpr() != nil:
+		fmt.Println("case pg_query2.Node_AExpr")
+		if clause.GetAExpr().GetLexpr() != nil {
+			err := parseExpression(ctx, clause.GetAExpr().GetLexpr(), parseRe)
 			if err != nil {
 				return err
 			}
 		}
-		if expr.Rexpr != nil {
-			err := parseExpression(ctx, expr.Rexpr, parseRe)
+		if clause.GetAExpr().GetRexpr() != nil {
+			err := parseExpression(ctx, clause.GetAExpr().GetRexpr(), parseRe)
 			if err != nil {
 				return err
 			}
 		}
-	case nodes.BoolExpr:
-		return parseExpression(ctx, expr.Args, parseRe)
-	case nodes.NullTest:
-		return parseExpression(ctx, expr.Arg, parseRe)
-	case nodes.ColumnRef:
-		cu := columnRefToColumnUsed(expr)
+	case clause.GetBoolExpr() != nil:
+		fmt.Println("case pg_query2.Node_BoolExpr")
+		// TODO should this be args or args[0]?
+		return parseExpression(ctx, clause.GetBoolExpr().Args[0], parseRe)
+	case clause.GetNullTest() != nil:
+		fmt.Println("case pg_query2.Node_NullTest")
+		nullTest := clause.GetNullTest()
+		if arg := nullTest.GetArg(); arg != nil {
+			return parseExpression(ctx, arg, parseRe)
+		}
+	case clause.GetColumnRef() != nil:
+		fmt.Println("case pg_query2.Node_ColumnRef")
+		// cu := columnRefToColumnUsed(expr)
+		cu := columnRefToColumnUsed(clause.GetColumnRef())
 		if cu == nil {
 			return nil
 		}
 		parseRe.Columns = append(parseRe.Columns, *cu)
-	case nodes.ParamRef:
+	case clause.GetParamRef() != nil:
+		fmt.Println("case pg_query2.Node_ParamRef")
 		// WHERE id=$1
-		AddQueryParam(&parseRe.Params, QueryParam{Number: expr.Number})
-	case nodes.A_Const:
+		AddQueryParam(&parseRe.Params, QueryParam{Number: clause.GetParamRef().GetNumber()})
+	case clause.GetAConst() != nil:
+		fmt.Println("case pg_query2.Node_AConst")
 		// WHERE 1
-	case nodes.FuncCall:
+	case clause.GetFuncCall() != nil:
+		fmt.Println("case pg_query2.Node_FuncCall")
 		// WHERE date=NOW()
 		// WHERE MAX(id) > 1
-		if err := parseExpression(ctx, expr.Args, parseRe); err != nil {
-			return err
-		}
-		// SELECT ROW_NUMBER() OVER (PARTITION BY id)
-		if expr.Over != nil {
-			err := parseExpression(ctx, expr.Over, parseRe)
-			if err != nil {
+		// TODO should this be args or args[0]?
+		funcCall := clause.GetFuncCall()
+		if len(funcCall.Args) > 0 {
+			if err := parseExpression(ctx, funcCall.Args[0], parseRe); err != nil {
 				return err
 			}
 		}
-	case nodes.TypeCast:
+		// SELECT ROW_NUMBER() OVER (PARTITION BY id)
+		if clause.GetFuncCall().GetOver() != nil {
+			fmt.Println("case pg_query2.Node_FuncCall.Over")
+			// TODO dubious rewrite and should this be [0]
+			over := clause.GetFuncCall().GetOver()
+			if len(over.PartitionClause) > 0 {
+				err := parseExpression(ctx, over.PartitionClause[0], parseRe)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	case clause.GetTypeCast() != nil:
+		fmt.Println("case pg_query2.Node_TypeCast")
 		// WHERE foo=True
-		return parseExpression(ctx, expr.Arg, parseRe)
-	case nodes.List:
+		return parseExpression(ctx, clause.GetTypeCast().Arg, parseRe)
+	case clause.GetList() != nil:
+		fmt.Println("case pg_query2.Node_List")
 		// WHERE id IN (1, 2, 3)
-		for _, item := range expr.Items {
+		for _, item := range clause.GetList().Items {
 			err := parseExpression(ctx, item, parseRe)
 			if err != nil {
 				return err
 			}
 		}
-	case nodes.SubLink:
+	case clause.GetSubLink() != nil:
+		fmt.Println("case pg_query2.Node_SubLink")
 		// WHERE id IN (SELECT id FROM foo)
-		selectStmt, ok := expr.Subselect.(nodes.SelectStmt)
-		if !ok {
+		subselect := clause.GetSubLink().GetSubselect()
+		if subselect.GetSelectStmt() == nil {
 			return fmt.Errorf(
-				"Unsupported subquery type: %s", reflect.TypeOf(expr.Subselect))
+				"unsupported subquery type: %v", subselect)
 		}
-		queryParams, err := validateSelectStmt(ctx, selectStmt)
+		queryParams, err := validateSelectStmt(ctx, subselect.GetSelectStmt())
 		if err != nil {
 			return err
 		}
 		if len(queryParams) > 0 {
 			AddQueryParams(&parseRe.Params, queryParams)
 		}
-	case nodes.CoalesceExpr:
-		return parseExpression(ctx, expr.Args, parseRe)
-	case *nodes.WindowDef:
-		return parseWindowDef(ctx, expr, parseRe)
-	case nodes.WindowDef:
-		return parseWindowDef(ctx, &expr, parseRe)
-	case nodes.SortBy:
-		return parseExpression(ctx, expr.Node, parseRe)
+	case clause.GetCoalesceExpr() != nil:
+		fmt.Println("case pg_query2.Node_CoalesceExpr")
+		// TODO should this be [0]?
+		return parseExpression(ctx, clause.GetCoalesceExpr().GetArgs()[0], parseRe)
+	case clause.GetWindowDef() != nil:
+		fmt.Println("window def")
+		return parseWindowDef(ctx, clause.GetWindowDef(), parseRe)
+	case clause.GetSortBy() != nil:
+		fmt.Println("case pg_query2.Node_SortBy")
+		return parseExpression(ctx, clause.GetSortBy().Node, parseRe)
 	default:
 		return fmt.Errorf(
-			"Unsupported expression, found node of type: %v",
+			"unsupported expression, found node of type: %v",
 			reflect.TypeOf(clause),
 		)
 	}
+	fmt.Println("parseExpression end")
 
 	return nil
 }
 
 // find used column names from where clause
-func parseWhereClause(ctx VetContext, clause nodes.Node, parseRe *ParseResult) error {
+func parseWhereClause(ctx VetContext, clause *pg_query2.Node, parseRe *ParseResult) error {
 	err := parseExpression(ctx, clause, parseRe)
 	if err != nil {
-		err = fmt.Errorf("Invalid WHERE clause: %w", err)
+		err = fmt.Errorf("invalid WHERE clause: %w", err)
 	}
 	return err
 }
 
-func getUsedColumnsFromNodeList(nodelist nodes.List) []ColumnUsed {
+func getUsedColumnsFromNodeList(nodelist []*pg_query2.Node) []ColumnUsed {
 	usedCols := []ColumnUsed{}
-	for _, item := range nodelist.Items {
-		switch clause := item.(type) {
-		case nodes.ColumnRef:
-			cu := columnRefToColumnUsed(clause)
+	for _, item := range nodelist {
+		if item.GetColumnRef() != nil {
+			cu := columnRefToColumnUsed(item.GetColumnRef())
 			if cu != nil {
 				usedCols = append(usedCols, *cu)
 			}
@@ -437,12 +493,11 @@ func getUsedColumnsFromNodeList(nodelist nodes.List) []ColumnUsed {
 	return usedCols
 }
 
-func getUsedColumnsFromSortClause(sortList nodes.List) []ColumnUsed {
+func getUsedColumnsFromSortClause(sortList []*pg_query2.Node) []ColumnUsed {
 	usedCols := []ColumnUsed{}
-	for _, item := range sortList.Items {
-		switch sortClause := item.(type) {
-		case nodes.SortBy:
-			if colRef, ok := sortClause.Node.(nodes.ColumnRef); ok {
+	for _, item := range sortList {
+		if item.GetSortBy() != nil {
+			if colRef := item.GetSortBy().GetNode().GetColumnRef(); colRef != nil {
 				cu := columnRefToColumnUsed(colRef)
 				if cu != nil {
 					usedCols = append(usedCols, *cu)
@@ -453,20 +508,19 @@ func getUsedColumnsFromSortClause(sortList nodes.List) []ColumnUsed {
 	return usedCols
 }
 
-func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) ([]QueryParam, error) {
+func validateSelectStmt(ctx VetContext, stmt *pg_query2.SelectStmt) ([]QueryParam, error) {
 	usedTables := getUsedTablesFromSelectStmt(stmt.FromClause)
 
 	usedCols := []ColumnUsed{}
 	queryParams := []QueryParam{}
 
-	for _, item := range stmt.TargetList.Items {
-		target, ok := item.(nodes.ResTarget)
-		if !ok {
+	for _, item := range stmt.TargetList {
+		if item.GetResTarget() == nil {
 			continue
 		}
 
 		re := &ParseResult{}
-		err := parseExpression(ctx, target.Val, re)
+		err := parseExpression(ctx, item.GetResTarget().Val, re)
 		if err != nil {
 			return nil, err
 		}
@@ -494,7 +548,7 @@ func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) ([]QueryParam, er
 		}
 	}
 
-	if len(stmt.GroupClause.Items) > 0 {
+	if len(stmt.GroupClause) > 0 {
 		usedCols = append(usedCols, getUsedColumnsFromNodeList(stmt.GroupClause)...)
 	}
 
@@ -512,9 +566,10 @@ func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) ([]QueryParam, er
 		}
 	}
 
-	if len(stmt.WindowClause.Items) > 0 {
+	if len(stmt.WindowClause) > 0 {
 		re := &ParseResult{}
-		err := parseExpression(ctx, stmt.WindowClause, re)
+		// TODO: should this be [0]?
+		err := parseExpression(ctx, stmt.WindowClause[0], re)
 		if err != nil {
 			return nil, err
 		}
@@ -522,39 +577,38 @@ func validateSelectStmt(ctx VetContext, stmt nodes.SelectStmt) ([]QueryParam, er
 		AddQueryParams(&queryParams, re.Params)
 	}
 
-	if len(stmt.SortClause.Items) > 0 {
+	if len(stmt.SortClause) > 0 {
 		usedCols = append(usedCols, getUsedColumnsFromSortClause(stmt.SortClause)...)
 	}
 
 	return queryParams, validateTableColumns(ctx, usedTables, usedCols)
 }
 
-func validateUpdateStmt(ctx VetContext, stmt nodes.UpdateStmt) ([]QueryParam, error) {
-	tableName := *stmt.Relation.Relname
+func validateUpdateStmt(ctx VetContext, stmt *pg_query2.UpdateStmt) ([]QueryParam, error) {
+	tableName := stmt.Relation.Relname
 	usedTables := []TableUsed{{Name: tableName}}
 	usedTables = append(usedTables, getUsedTablesFromSelectStmt(stmt.FromClause)...)
 
 	usedCols := []ColumnUsed{}
 	queryParams := []QueryParam{}
 
-	for _, item := range stmt.TargetList.Items {
-		target := item.(nodes.ResTarget)
+	for _, item := range stmt.TargetList {
+		target := item.GetResTarget()
 		usedCols = append(usedCols, ColumnUsed{
 			Table:    tableName,
-			Column:   *target.Name,
+			Column:   target.Name,
 			Location: target.Location,
 		})
 
-		// 'val' is the expression to assign.
-		switch expr := target.Val.(type) {
-		case nodes.ColumnRef:
-			// UPDATE table1 SET table1.foo=table2.bar FROM table2
-			cu := columnRefToColumnUsed(expr)
+		fmt.Println("target", target)
+		switch {
+		case target.Val != nil && target.Val.GetColumnRef() != nil:
+			cu := columnRefToColumnUsed(target.Val.GetColumnRef())
 			if cu != nil {
 				usedCols = append(usedCols, *cu)
 			}
-		case nodes.ParamRef:
-			AddQueryParam(&queryParams, QueryParam{Number: expr.Number})
+		case target.Val != nil && target.Val.GetParamRef() != nil:
+			AddQueryParam(&queryParams, QueryParam{Number: target.Val.GetParamRef().Number})
 		}
 	}
 
@@ -568,34 +622,34 @@ func validateUpdateStmt(ctx VetContext, stmt nodes.UpdateStmt) ([]QueryParam, er
 		AddQueryParams(&queryParams, re.Params)
 	}
 
-	if len(stmt.ReturningList.Items) > 0 {
+	if len(stmt.ReturningList) > 0 {
 		usedCols = append(usedCols, getUsedColumnsFromReturningList(stmt.ReturningList)...)
 	}
 
 	return queryParams, validateTableColumns(ctx, usedTables, usedCols)
 }
 
-func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) ([]QueryParam, error) {
-	tableName := *stmt.Relation.Relname
+func validateInsertStmt(ctx VetContext, stmt *pg_query2.InsertStmt) ([]QueryParam, error) {
+	tableName := stmt.Relation.Relname
 	usedTables := []TableUsed{{Name: tableName}}
 
 	targetCols := []ColumnUsed{}
-	for _, item := range stmt.Cols.Items {
-		target := item.(nodes.ResTarget)
+	for _, item := range stmt.Cols {
+		target := item.GetResTarget()
 		targetCols = append(targetCols, ColumnUsed{
 			Table:    tableName,
-			Column:   *target.Name,
+			Column:   target.Name,
 			Location: target.Location,
 		})
 	}
 
-	values := []nodes.Node{}
+	values := []*pg_query2.Node{}
 	// make a copy of targetCols because we need it to do value count
 	// validation separately
 	usedCols := append([]ColumnUsed{}, targetCols...)
 	queryParams := []QueryParam{}
 
-	selectStmt := stmt.SelectStmt.(nodes.SelectStmt)
+	selectStmt := stmt.GetSelectStmt().GetSelectStmt()
 	if selectStmt.ValuesLists != nil {
 		/*
 		 * In the form of:
@@ -608,19 +662,23 @@ func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) ([]QueryParam, er
 		 * node), regardless of the context of the VALUES list. It's up to parse
 		 * analysis to reject that where not valid.
 		 */
-		for _, node := range selectStmt.ValuesLists[0] {
-			re := &ParseResult{}
-			err := parseExpression(ctx, node, re)
-			if err != nil {
-				return nil, fmt.Errorf("Invalid value list: %w", err)
+		// fmt.Println("value list is ", selectStmt.ValuesLists)
+		for _, list := range selectStmt.GetValuesLists() {
+			for _, node := range list.GetList().Items {
+				re := &ParseResult{}
+				err := parseExpression(ctx, node, re)
+				if err != nil {
+					return nil, fmt.Errorf("invalid value list: %w", err)
+				}
+				if len(re.Columns) > 0 {
+					usedCols = append(usedCols, re.Columns...)
+				}
+				if len(re.Params) > 0 {
+					AddQueryParams(&queryParams, re.Params)
+				}
+				fmt.Println("value also to add ", node.GetList())
+				values = append(values, node)
 			}
-			if len(re.Columns) > 0 {
-				usedCols = append(usedCols, re.Columns...)
-			}
-			if len(re.Params) > 0 {
-				AddQueryParams(&queryParams, re.Params)
-			}
-			values = append(values, node)
 		}
 	} else {
 		/*
@@ -646,26 +704,27 @@ func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) ([]QueryParam, er
 			}
 		}
 
-		for _, item := range selectStmt.TargetList.Items {
-			target := item.(nodes.ResTarget)
+		for _, item := range selectStmt.TargetList {
+			target := item.GetResTarget().Val
+			fmt.Println("target value to add", target)
 			values = append(values, target)
 
-			switch targetVal := target.Val.(type) {
-			case nodes.ColumnRef:
-				cu := columnRefToColumnUsed(targetVal)
+			switch {
+			case target.GetColumnRef() != nil:
+				cu := columnRefToColumnUsed(target.GetColumnRef())
 				if cu == nil {
 					continue
 				}
 				usedCols = append(usedCols, *cu)
-			case nodes.SubLink:
-				subquery, ok := targetVal.Subselect.(nodes.SelectStmt)
-				if !ok {
+			case target.GetSubLink() != nil:
+				tv := target.GetSubLink().Subselect
+				if tv.GetSelectStmt() == nil {
 					return nil, fmt.Errorf(
-						"Unsupported subquery type in value list: %s", reflect.TypeOf(targetVal.Subselect))
+						"unsupported subquery type in value list: %s", reflect.TypeOf(tv))
 				}
-				qparams, err := validateSelectStmt(ctx, subquery)
+				qparams, err := validateSelectStmt(ctx, tv.GetSelectStmt())
 				if err != nil {
-					return nil, fmt.Errorf("Invalid SELECT query in value list: %w", err)
+					return nil, fmt.Errorf("invalid SELECT query in value list: %w", err)
 				}
 				if len(qparams) > 0 {
 					AddQueryParams(&queryParams, qparams)
@@ -674,7 +733,8 @@ func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) ([]QueryParam, er
 		}
 	}
 
-	if len(stmt.ReturningList.Items) > 0 {
+	if len(stmt.ReturningList) > 0 {
+		fmt.Println("returning list to add", stmt.ReturningList)
 		usedCols = append(usedCols, getUsedColumnsFromReturningList(stmt.ReturningList)...)
 	}
 
@@ -682,6 +742,7 @@ func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) ([]QueryParam, er
 		return nil, err
 	}
 
+	fmt.Println("target columns are", targetCols, "values are", values, "lengths are", len(targetCols), len(values))
 	if err := validateInsertValues(ctx, targetCols, values); err != nil {
 		return nil, err
 	}
@@ -689,8 +750,8 @@ func validateInsertStmt(ctx VetContext, stmt nodes.InsertStmt) ([]QueryParam, er
 	return queryParams, nil
 }
 
-func validateDeleteStmt(ctx VetContext, stmt nodes.DeleteStmt) ([]QueryParam, error) {
-	tableName := *stmt.Relation.Relname
+func validateDeleteStmt(ctx VetContext, stmt *pg_query2.DeleteStmt) ([]QueryParam, error) {
+	tableName := stmt.Relation.Relname
 	if err := validateTable(ctx, tableName); err != nil {
 		return nil, err
 	}
@@ -712,7 +773,7 @@ func validateDeleteStmt(ctx VetContext, stmt nodes.DeleteStmt) ([]QueryParam, er
 		}
 	}
 
-	if len(stmt.ReturningList.Items) > 0 {
+	if len(stmt.ReturningList) > 0 {
 		usedCols = append(
 			usedCols, getUsedColumnsFromReturningList(stmt.ReturningList)...)
 	}
@@ -728,37 +789,33 @@ func validateDeleteStmt(ctx VetContext, stmt nodes.DeleteStmt) ([]QueryParam, er
 }
 
 func ValidateSqlQuery(ctx VetContext, queryStr string) ([]QueryParam, error) {
-	tree, err := pg_query.Parse(queryStr)
+	tree, err := pg_query2.Parse(queryStr)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(tree.Statements) == 0 || len(tree.Statements) > 1 {
-		return nil, fmt.Errorf("query contained more than one statement.")
+	if len(tree.Stmts) == 0 || len(tree.Stmts) > 1 {
+		return nil, fmt.Errorf("query contained more than one statement")
 	}
 
-	raw, ok := tree.Statements[0].(nodes.RawStmt)
-	if !ok {
-		return nil, fmt.Errorf("query contained invalid statement.")
-	}
-
-	switch stmt := raw.Stmt.(type) {
-	case nodes.SelectStmt:
-		return validateSelectStmt(ctx, stmt)
-	case nodes.UpdateStmt:
-		return validateUpdateStmt(ctx, stmt)
-	case nodes.InsertStmt:
-		return validateInsertStmt(ctx, stmt)
-	case nodes.DeleteStmt:
-		return validateDeleteStmt(ctx, stmt)
-	case nodes.DropStmt:
-	case nodes.TruncateStmt:
-	case nodes.AlterTableStmt:
-	case nodes.CreateSchemaStmt:
-	case nodes.VariableSetStmt:
-		// TODO: check for invalid pg variables
+	var raw *pg_query2.RawStmt = tree.Stmts[0]
+	switch {
+	case raw.Stmt.GetSelectStmt() != nil:
+		return validateSelectStmt(ctx, raw.Stmt.GetSelectStmt())
+	case raw.Stmt.GetUpdateStmt() != nil:
+		return validateUpdateStmt(ctx, raw.Stmt.GetUpdateStmt())
+	case raw.Stmt.GetInsertStmt() != nil:
+		return validateInsertStmt(ctx, raw.Stmt.GetInsertStmt())
+	case raw.Stmt.GetDeleteStmt() != nil:
+		return validateDeleteStmt(ctx, raw.Stmt.GetDeleteStmt())
+	case raw.Stmt.GetDropStmt() != nil:
+	case raw.Stmt.GetTruncateStmt() != nil:
+	case raw.Stmt.GetAlterTableStmt() != nil:
+	case raw.Stmt.GetCreateSchemaStmt() != nil:
+	case raw.Stmt.GetVariableSetStmt() != nil:
+	// TODO: check for invalid pg variables
 	default:
-		return nil, fmt.Errorf("unsupported statement: %v.", reflect.TypeOf(raw.Stmt))
+		return nil, fmt.Errorf("unsupported statement: %v", reflect.TypeOf(raw.Stmt))
 	}
 
 	return nil, nil
