@@ -1,10 +1,11 @@
 package schema
 
 import (
-	"io/ioutil"
+	"os"
 	"strings"
 
-	pg_query "github.com/pganalyze/pg_query_go/v2"
+	pg_query "github.com/pganalyze/pg_query_go"
+	nodes "github.com/pganalyze/pg_query_go/nodes"
 )
 
 // func debugNode(n nodes.Node) {
@@ -17,20 +18,22 @@ import (
 // }
 
 func (s *Db) LoadPostgres(schemaPath string) error {
-	schemaBytes, err := ioutil.ReadFile(schemaPath)
+	schemaBytes, err := os.ReadFile(schemaPath)
 	if err != nil {
 		return err
 	}
-
-	// func() {
-	// 	tree, _ := pg_query.ParseToJSON(string(schemaBytes))
-	// 	fmt.Println("????????????", tree)
-	// }()
 
 	tree, err := pg_query.Parse(string(schemaBytes))
 	if err != nil {
 		return err
 	}
+	// fmt.Printf("tree: %+v\n", tree)
+
+	// tree2, err := pg_query2.Parse(string(schemaBytes))
+	// if err != nil {
+	// 	return err
+	// }
+	// fmt.Printf("tree2: %+v\n", tree2)
 
 	for _, stmt := range tree.Statements {
 		raw, ok := stmt.(nodes.RawStmt)
