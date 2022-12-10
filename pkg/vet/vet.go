@@ -68,7 +68,7 @@ func DebugQuery(q string) {
 	var pretty bytes.Buffer
 	json.Indent(&pretty, []byte(b), "\t", "  ")
 	fmt.Println("query: " + q)
-	// fmt.Println("parsed query: " + pretty.String())
+	fmt.Println("parsed query: " + pretty.String())
 }
 
 func rangeVarToTableUsed(r *pg_query2.RangeVar) TableUsed {
@@ -117,13 +117,6 @@ func columnRefToColumnUsed(colRef *pg_query2.ColumnRef) *ColumnUsed {
 }
 
 func getUsedTablesFromJoinArg(arg *pg_query2.Node) []TableUsed {
-	// switch n := arg.(type) {
-	// case pg_query2.Node_RangeVar:
-	// 	return []TableUsed{rangeVarToTableUsed(n)}
-	// case pg_query2.Node_JoinExpr:
-	// 	return append(
-	// 		getUsedTablesFromJoinArg(n.JoinExpr.Larg),
-	// 		getUsedTablesFromJoinArg(n.JoinExpr.Rarg)...)
 	switch {
 	case arg.GetRangeVar() != nil:
 		return []TableUsed{rangeVarToTableUsed(arg.GetRangeVar())}
@@ -145,17 +138,7 @@ func getUsedTablesFromSelectStmt(fromClauseList []*pg_query2.Node) []TableUsed {
 		return usedTables
 	}
 
-	// var fromItem any
 	for _, fromItem := range fromClauseList {
-		// 	switch fromExpr := fromItem.(type) {
-		// 	case pg_query2.Node_RangeVar:
-		// 		// SELECT without JOIN
-		// 		usedTables = append(usedTables, rangeVarToTableUsed(fromExpr))
-		// 	case pg_query2.Node_JoinExpr:
-		// 		// SELECT with one or more JOINs
-		// 		usedTables = append(usedTables, getUsedTablesFromJoinArg(fromExpr.JoinExpr.Larg)...)
-		// 		usedTables = append(usedTables, getUsedTablesFromJoinArg(fromExpr.JoinExpr.Rarg)...)
-		// 	}
 		switch {
 		case fromItem.GetRangeVar() != nil:
 			// SELECT without JOIN
@@ -246,12 +229,10 @@ func getUsedColumnsFromReturningList(returningList []*pg_query2.Node) []ColumnUs
 		// case pg_query2.ColumnRef:
 		case target.Val.GetColumnRef() != nil:
 			cu := columnRefToColumnUsed(target.Val.GetColumnRef())
-			fmt.Println("column used: ", cu)
 			if cu == nil {
 				continue
 			}
 			usedCols = append(usedCols, *cu)
-			fmt.Println("added column to usedCols: ", cu)
 		default:
 			// do nothing if no column is referenced
 		}
@@ -341,7 +322,6 @@ func validateInsertValues(ctx VetContext, cols []ColumnUsed, vals []*pg_query2.N
 }
 
 func parseWindowDef(ctx VetContext, winDef *pg_query2.WindowDef, parseRe *ParseResult) error {
-	print("parseWindowDef: ", winDef)
 	if len(winDef.PartitionClause) > 0 {
 		// TODO should this be [0]
 		if err := parseExpression(ctx, winDef.GetPartitionClause()[0], parseRe); err != nil {
@@ -361,7 +341,6 @@ func parseWindowDef(ctx VetContext, winDef *pg_query2.WindowDef, parseRe *ParseR
 func parseExpression(ctx VetContext, clause *pg_query2.Node, parseRe *ParseResult) error {
 	switch {
 	case clause.GetAExpr() != nil:
-		fmt.Println("case pg_query2.Node_AExpr")
 		if clause.GetAExpr().GetLexpr() != nil {
 			err := parseExpression(ctx, clause.GetAExpr().GetLexpr(), parseRe)
 			if err != nil {
@@ -375,17 +354,14 @@ func parseExpression(ctx VetContext, clause *pg_query2.Node, parseRe *ParseResul
 			}
 		}
 	case clause.GetBoolExpr() != nil:
-		fmt.Println("case pg_query2.Node_BoolExpr")
 		// TODO should this be args or args[0]?
 		return parseExpression(ctx, clause.GetBoolExpr().Args[0], parseRe)
 	case clause.GetNullTest() != nil:
-		fmt.Println("case pg_query2.Node_NullTest")
 		nullTest := clause.GetNullTest()
 		if arg := nullTest.GetArg(); arg != nil {
 			return parseExpression(ctx, arg, parseRe)
 		}
 	case clause.GetColumnRef() != nil:
-		fmt.Println("case pg_query2.Node_ColumnRef")
 		// cu := columnRefToColumnUsed(expr)
 		cu := columnRefToColumnUsed(clause.GetColumnRef())
 		if cu == nil {
@@ -393,14 +369,11 @@ func parseExpression(ctx VetContext, clause *pg_query2.Node, parseRe *ParseResul
 		}
 		parseRe.Columns = append(parseRe.Columns, *cu)
 	case clause.GetParamRef() != nil:
-		fmt.Println("case pg_query2.Node_ParamRef")
 		// WHERE id=$1
 		AddQueryParam(&parseRe.Params, QueryParam{Number: clause.GetParamRef().GetNumber()})
 	case clause.GetAConst() != nil:
-		fmt.Println("case pg_query2.Node_AConst")
 		// WHERE 1
 	case clause.GetFuncCall() != nil:
-		fmt.Println("case pg_query2.Node_FuncCall")
 		// WHERE date=NOW()
 		// WHERE MAX(id) > 1
 		// TODO should this be args or args[0]?
@@ -412,7 +385,6 @@ func parseExpression(ctx VetContext, clause *pg_query2.Node, parseRe *ParseResul
 		}
 		// SELECT ROW_NUMBER() OVER (PARTITION BY id)
 		if clause.GetFuncCall().GetOver() != nil {
-			fmt.Println("case pg_query2.Node_FuncCall.Over")
 			// TODO dubious rewrite and should this be [0]
 			over := clause.GetFuncCall().GetOver()
 			if len(over.PartitionClause) > 0 {
@@ -423,11 +395,9 @@ func parseExpression(ctx VetContext, clause *pg_query2.Node, parseRe *ParseResul
 			}
 		}
 	case clause.GetTypeCast() != nil:
-		fmt.Println("case pg_query2.Node_TypeCast")
 		// WHERE foo=True
 		return parseExpression(ctx, clause.GetTypeCast().Arg, parseRe)
 	case clause.GetList() != nil:
-		fmt.Println("case pg_query2.Node_List")
 		// WHERE id IN (1, 2, 3)
 		for _, item := range clause.GetList().Items {
 			err := parseExpression(ctx, item, parseRe)
@@ -436,7 +406,6 @@ func parseExpression(ctx VetContext, clause *pg_query2.Node, parseRe *ParseResul
 			}
 		}
 	case clause.GetSubLink() != nil:
-		fmt.Println("case pg_query2.Node_SubLink")
 		// WHERE id IN (SELECT id FROM foo)
 		subselect := clause.GetSubLink().GetSubselect()
 		if subselect.GetSelectStmt() == nil {
@@ -451,14 +420,11 @@ func parseExpression(ctx VetContext, clause *pg_query2.Node, parseRe *ParseResul
 			AddQueryParams(&parseRe.Params, queryParams)
 		}
 	case clause.GetCoalesceExpr() != nil:
-		fmt.Println("case pg_query2.Node_CoalesceExpr")
 		// TODO should this be [0]?
 		return parseExpression(ctx, clause.GetCoalesceExpr().GetArgs()[0], parseRe)
 	case clause.GetWindowDef() != nil:
-		fmt.Println("window def")
 		return parseWindowDef(ctx, clause.GetWindowDef(), parseRe)
 	case clause.GetSortBy() != nil:
-		fmt.Println("case pg_query2.Node_SortBy")
 		return parseExpression(ctx, clause.GetSortBy().Node, parseRe)
 	default:
 		return fmt.Errorf(
@@ -466,7 +432,6 @@ func parseExpression(ctx VetContext, clause *pg_query2.Node, parseRe *ParseResul
 			reflect.TypeOf(clause),
 		)
 	}
-	fmt.Println("parseExpression end")
 
 	return nil
 }
@@ -600,7 +565,6 @@ func validateUpdateStmt(ctx VetContext, stmt *pg_query2.UpdateStmt) ([]QueryPara
 			Location: target.Location,
 		})
 
-		fmt.Println("target", target)
 		switch {
 		case target.Val != nil && target.Val.GetColumnRef() != nil:
 			cu := columnRefToColumnUsed(target.Val.GetColumnRef())
@@ -662,7 +626,6 @@ func validateInsertStmt(ctx VetContext, stmt *pg_query2.InsertStmt) ([]QueryPara
 		 * node), regardless of the context of the VALUES list. It's up to parse
 		 * analysis to reject that where not valid.
 		 */
-		// fmt.Println("value list is ", selectStmt.ValuesLists)
 		for _, list := range selectStmt.GetValuesLists() {
 			for _, node := range list.GetList().Items {
 				re := &ParseResult{}
@@ -676,7 +639,6 @@ func validateInsertStmt(ctx VetContext, stmt *pg_query2.InsertStmt) ([]QueryPara
 				if len(re.Params) > 0 {
 					AddQueryParams(&queryParams, re.Params)
 				}
-				fmt.Println("value also to add ", node.GetList())
 				values = append(values, node)
 			}
 		}
@@ -706,7 +668,6 @@ func validateInsertStmt(ctx VetContext, stmt *pg_query2.InsertStmt) ([]QueryPara
 
 		for _, item := range selectStmt.TargetList {
 			target := item.GetResTarget().Val
-			fmt.Println("target value to add", target)
 			values = append(values, target)
 
 			switch {
@@ -734,7 +695,6 @@ func validateInsertStmt(ctx VetContext, stmt *pg_query2.InsertStmt) ([]QueryPara
 	}
 
 	if len(stmt.ReturningList) > 0 {
-		fmt.Println("returning list to add", stmt.ReturningList)
 		usedCols = append(usedCols, getUsedColumnsFromReturningList(stmt.ReturningList)...)
 	}
 
@@ -742,7 +702,6 @@ func validateInsertStmt(ctx VetContext, stmt *pg_query2.InsertStmt) ([]QueryPara
 		return nil, err
 	}
 
-	fmt.Println("target columns are", targetCols, "values are", values, "lengths are", len(targetCols), len(values))
 	if err := validateInsertValues(ctx, targetCols, values); err != nil {
 		return nil, err
 	}

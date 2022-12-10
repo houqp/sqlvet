@@ -7,15 +7,6 @@ import (
 	pg_query2 "github.com/pganalyze/pg_query_go/v2"
 )
 
-// func debugNode(n nodes.Node) {
-// 	b, e := n.MarshalJSON()
-// 	if e != nil {
-// 		fmt.Println("Node decode error:", e)
-// 	} else {
-// 		fmt.Println(string(b))
-// 	}
-// }
-
 func (s *Db) LoadPostgres(schemaPath string) error {
 	schemaBytes, err := os.ReadFile(schemaPath)
 	if err != nil {
@@ -26,13 +17,6 @@ func (s *Db) LoadPostgres(schemaPath string) error {
 	if err != nil {
 		return err
 	}
-	// fmt.Printf("tree: %+v\n", tree)
-
-	// tree2, err := pg_query2.Parse(string(schemaBytes))
-	// if err != nil {
-	// 	return err
-	// }
-	// fmt.Printf("tree2: %+v\n", tree2)
 
 	var stmt any
 	for _, stmt = range tree.Stmts {
