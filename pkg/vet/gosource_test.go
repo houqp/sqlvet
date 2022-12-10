@@ -11,7 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/houqp/sqlvet/pkg/vet"
+	"github.com/samiam2013/sqlvet/pkg/vet"
 )
 
 type GoSourceTmpDir struct{}

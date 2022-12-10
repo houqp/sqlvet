@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/houqp/sqlvet/pkg/schema"
-	"github.com/houqp/sqlvet/pkg/vet"
+	"github.com/samiam2013/sqlvet/pkg/schema"
+	"github.com/samiam2013/sqlvet/pkg/vet"
 )
 
 var mockDbSchema = &schema.Db{
@@ -44,6 +44,7 @@ var mockDbSchema = &schema.Db{
 
 var mockCtx = vet.VetContext{Schema: mockDbSchema}
 
+// passing
 func TestInsert(t *testing.T) {
 	testCases := []struct {
 		Name  string
@@ -105,6 +106,7 @@ func TestInsert(t *testing.T) {
 	}
 }
 
+// passing
 func TestInvalidInsert(t *testing.T) {
 	testCases := []struct {
 		Name  string
@@ -129,12 +131,12 @@ func TestInvalidInsert(t *testing.T) {
 		{
 			"not enough values",
 			`INSERT INTO foo (id, value) VALUES ($1)`,
-			errors.New("Column count 2 doesn't match value count 1."),
+			errors.New("column count 2 doesn't match value count 1"),
 		},
 		{
 			"too many values",
 			`INSERT INTO foo (id, value) VALUES ($1, $2, $3)`,
-			errors.New("Column count 2 doesn't match value count 3."),
+			errors.New("column count 2 doesn't match value count 3"),
 		},
 		{
 			"invalid column in value list",
@@ -177,7 +179,7 @@ func TestInvalidInsert(t *testing.T) {
 			FROM bar
 			WHERE bar.id=2`,
 			fmt.Errorf(
-				"Invalid SELECT query in value list: %w",
+				"invalid SELECT query in value list: %w",
 				errors.New("column `ida` is not defined in table `bar`")),
 		},
 		{
@@ -210,7 +212,7 @@ func TestInvalidInsert(t *testing.T) {
 				'test'
 			)`,
 			fmt.Errorf(
-				"Invalid value list: %w",
+				"invalid value list: %w",
 				errors.New("column `ida` is not defined in table `bar`")),
 		},
 		{
@@ -231,6 +233,7 @@ func TestInvalidInsert(t *testing.T) {
 	}
 }
 
+// passing
 func TestInvalidSelect(t *testing.T) {
 	testCases := []struct {
 		Name  string
@@ -349,6 +352,7 @@ func TestInvalidSelect(t *testing.T) {
 // AND    attname = $2
 // AND    NOT attisdropped`,
 
+// passing
 func TestSelect(t *testing.T) {
 	testCases := []struct {
 		Name  string
@@ -404,6 +408,7 @@ func TestSelect(t *testing.T) {
 	}
 }
 
+// passing
 func TestUpdate(t *testing.T) {
 	testCases := []struct {
 		Name  string
@@ -503,6 +508,7 @@ func TestInvalidUpdate(t *testing.T) {
 	}
 }
 
+// passing
 func TestDelete(t *testing.T) {
 	testCases := []struct {
 		Name  string
@@ -578,14 +584,14 @@ func TestInvalidDelete(t *testing.T) {
 			"invalid column in where subquery",
 			`DELETE FROM foo WHERE id = (SELECT id FROM foo WHERE date=NOW())`,
 			fmt.Errorf(
-				"Invalid WHERE clause: %w",
+				"invalid WHERE clause: %w",
 				errors.New("column `date` is not defined in table `foo`")),
 		},
 		{
 			"invalid table in where subquery",
 			`DELETE FROM foo WHERE id = (SELECT id FROM foononexist WHERE id=1)`,
 			fmt.Errorf(
-				"Invalid WHERE clause: %w",
+				"invalid WHERE clause: %w",
 				errors.New("invalid table name: foononexist")),
 		},
 		{

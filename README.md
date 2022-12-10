@@ -1,9 +1,5 @@
 # Sqlvet
 
-[![goreportcard](https://goreportcard.com/badge/github.com/houqp/sqlvet)](https://goreportcard.com/report/github.com/houqp/sqlvet)
-[![codecov](https://codecov.io/gh/houqp/sqlvet/branch/master/graphs/badge.svg?branch=master)](https://codecov.io/gh/houqp/sqlvet)
-[![build-status](https://github.com/houqp/sqlvet/workflows/build/badge.svg)](https://github.com/houqp/sqlvet/actions)
-
 Sqlvet performs static analysis on raw SQL queries in your Go code base to
 surface potential runtime errors at build time.
 
@@ -16,10 +12,10 @@ Feature highlights:
 * Validate column names
 
 TODO:
+
 * Validate query function argument count and types
-* Support MySQL syntax
 * Type check value list in UPDATE query
-* Trace wrapper function call
+* rename to psqlvet for delineation (unlike forked repo, no plan to support mysql)
 
 
 ## Usage
@@ -27,7 +23,7 @@ TODO:
 ### Installation
 
 ```
-$ go get github.com/houqp/sqlvet
+$ go get github.com/samiam2013/sqlvet
 ```
 
 ### Zero conf
