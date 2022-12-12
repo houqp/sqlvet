@@ -129,12 +129,12 @@ func TestInvalidInsert(t *testing.T) {
 		{
 			"not enough values",
 			`INSERT INTO foo (id, value) VALUES ($1)`,
-			errors.New("Column count 2 doesn't match value count 1."),
+			errors.New("column count 2 doesn't match value count 1"),
 		},
 		{
 			"too many values",
 			`INSERT INTO foo (id, value) VALUES ($1, $2, $3)`,
-			errors.New("Column count 2 doesn't match value count 3."),
+			errors.New("column count 2 doesn't match value count 3"),
 		},
 		{
 			"invalid column in value list",
@@ -177,7 +177,7 @@ func TestInvalidInsert(t *testing.T) {
 			FROM bar
 			WHERE bar.id=2`,
 			fmt.Errorf(
-				"Invalid SELECT query in value list: %w",
+				"invalid SELECT query in value list: %w",
 				errors.New("column `ida` is not defined in table `bar`")),
 		},
 		{
@@ -210,7 +210,7 @@ func TestInvalidInsert(t *testing.T) {
 				'test'
 			)`,
 			fmt.Errorf(
-				"Invalid value list: %w",
+				"invalid value list: %w",
 				errors.New("column `ida` is not defined in table `bar`")),
 		},
 		{
@@ -578,14 +578,14 @@ func TestInvalidDelete(t *testing.T) {
 			"invalid column in where subquery",
 			`DELETE FROM foo WHERE id = (SELECT id FROM foo WHERE date=NOW())`,
 			fmt.Errorf(
-				"Invalid WHERE clause: %w",
+				"invalid WHERE clause: %w",
 				errors.New("column `date` is not defined in table `foo`")),
 		},
 		{
 			"invalid table in where subquery",
 			`DELETE FROM foo WHERE id = (SELECT id FROM foononexist WHERE id=1)`,
 			fmt.Errorf(
-				"Invalid WHERE clause: %w",
+				"invalid WHERE clause: %w",
 				errors.New("invalid table name: foononexist")),
 		},
 		{
