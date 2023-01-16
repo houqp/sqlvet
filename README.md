@@ -26,15 +26,16 @@ TODO:
 
 ### Installation
 
+Go less than 1.18:
 
-go install github.com/houqp/sqlvet@latest
 
-Go > 1.18:
 ```sh
 $ go get github.com/houqp/sqlvet
 ```
 
-Go >= 1.18:
+Go greater or equal 1.18:
+
+
 ```sh
 $ go install github.com/houqp/sqlvet@latest
 ```
