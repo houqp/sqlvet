@@ -26,8 +26,17 @@ TODO:
 
 ### Installation
 
-```
+
+go install github.com/houqp/sqlvet@latest
+
+Go > 1.18:
+```sh
 $ go get github.com/houqp/sqlvet
+```
+
+Go >= 1.18:
+```sh
+$ go install github.com/houqp/sqlvet@latest
 ```
 
 ### Zero conf
