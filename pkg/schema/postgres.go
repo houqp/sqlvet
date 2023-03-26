@@ -13,9 +13,19 @@ func (s *Db) LoadPostgres(schemaPath string) error {
 		return err
 	}
 
-	tree, err := pg_query.Parse(string(schemaBytes))
+	s.Tables, err = parsePostgresSchema(string(schemaBytes))
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func parsePostgresSchema(schemaInput string) (map[string]Table, error) {
+	tables := map[string]Table{}
+	tree, err := pg_query.Parse(schemaInput)
+	if err != nil {
+		return nil, err
 	}
 
 	for _, stmt := range tree.Stmts {
@@ -23,15 +33,15 @@ func (s *Db) LoadPostgres(schemaPath string) error {
 			continue
 		}
 
-		switch {
-		case stmt.Stmt.GetCreateStmt() != nil:
-			tableName := stmt.Stmt.GetCreateStmt().Relation.Relname
+		createStmt := stmt.Stmt.GetCreateStmt()
+		if createStmt != nil {
+			tableName := createStmt.Relation.Relname
 			table := Table{
 				Name:    tableName,
 				Columns: map[string]Column{},
 			}
 
-			for _, colElem := range stmt.Stmt.GetCreateStmt().TableElts {
+			for _, colElem := range createStmt.TableElts {
 				if colElem.GetColumnDef() == nil {
 					continue
 				}
@@ -53,9 +63,79 @@ func (s *Db) LoadPostgres(schemaPath string) error {
 				}
 			}
 
-			s.Tables[tableName] = table
+			tables[tableName] = table
+		}
+
+		viewStmt := stmt.Stmt.GetViewStmt()
+		if viewStmt != nil {
+			tableName := viewStmt.View.Relname
+			table := Table{
+				Name:     tableName,
+				Columns:  map[string]Column{},
+				ReadOnly: true,
+			}
+
+			query := viewStmt.GetQuery()
+			if query == nil {
+				continue
+			}
+
+			selStmt := query.GetSelectStmt()
+			if selStmt == nil {
+				continue
+			}
+
+			for _, item := range selStmt.TargetList {
+				resTarget := item.GetResTarget()
+				if resTarget == nil {
+					continue
+				}
+
+				if resTarget.Name != "" {
+					table.Columns[resTarget.Name] = Column{
+						Name: resTarget.Name,
+					}
+					continue
+				}
+
+				if resTarget.Val == nil {
+					continue
+				}
+
+				colRef := resTarget.Val.GetColumnRef()
+				if colRef == nil {
+					// parse only column references when no alias is provided
+					continue
+				}
+
+				var colField *pg_query.Node
+				if len(colRef.Fields) > 0 {
+					colField = colRef.Fields[len(colRef.Fields)-1]
+				}
+
+				if colField == nil {
+					continue
+				}
+
+				if colField.GetAStar() != nil {
+					// SELECT * - force parsing explicit columns for simplicity
+					continue
+				}
+
+				if colField.GetString_() == nil {
+					continue
+				}
+
+				colName := colField.GetString_().GetStr()
+				table.Columns[colName] = Column{
+					Name: colName,
+					Type: "", // type not set, never used for validation
+				}
+			}
+
+			tables[tableName] = table
 		}
 	}
 
-	return nil
+	return tables, nil
 }

@@ -241,13 +241,16 @@ func getUsedColumnsFromReturningList(returningList []*pg_query.Node) []ColumnUse
 	return usedCols
 }
 
-func validateTable(ctx VetContext, tname string) error {
+func validateTable(ctx VetContext, tname string, notReadOnly bool) error {
 	if ctx.Schema == nil {
 		return nil
 	}
-	_, ok := ctx.Schema.Tables[tname]
+	t, ok := ctx.Schema.Tables[tname]
 	if !ok {
 		return fmt.Errorf("invalid table name: %s", tname)
+	}
+	if notReadOnly && t.ReadOnly {
+		return fmt.Errorf("read-only table: %s", tname)
 	}
 	return nil
 }
@@ -551,6 +554,9 @@ func validateSelectStmt(ctx VetContext, stmt *pg_query.SelectStmt) ([]QueryParam
 
 func validateUpdateStmt(ctx VetContext, stmt *pg_query.UpdateStmt) ([]QueryParam, error) {
 	tableName := stmt.Relation.Relname
+	if err := validateTable(ctx, tableName, true); err != nil {
+		return nil, err
+	}
 	usedTables := []TableUsed{{Name: tableName}}
 	usedTables = append(usedTables, getUsedTablesFromSelectStmt(stmt.FromClause)...)
 
@@ -595,6 +601,9 @@ func validateUpdateStmt(ctx VetContext, stmt *pg_query.UpdateStmt) ([]QueryParam
 
 func validateInsertStmt(ctx VetContext, stmt *pg_query.InsertStmt) ([]QueryParam, error) {
 	tableName := stmt.Relation.Relname
+	if err := validateTable(ctx, tableName, true); err != nil {
+		return nil, err
+	}
 	usedTables := []TableUsed{{Name: tableName}}
 
 	targetCols := []ColumnUsed{}
@@ -711,7 +720,7 @@ func validateInsertStmt(ctx VetContext, stmt *pg_query.InsertStmt) ([]QueryParam
 
 func validateDeleteStmt(ctx VetContext, stmt *pg_query.DeleteStmt) ([]QueryParam, error) {
 	tableName := stmt.Relation.Relname
-	if err := validateTable(ctx, tableName); err != nil {
+	if err := validateTable(ctx, tableName, true); err != nil {
 		return nil, err
 	}
 
