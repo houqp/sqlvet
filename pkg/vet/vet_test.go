@@ -39,6 +39,18 @@ var mockDbSchema = &schema.Db{
 				},
 			},
 		},
+		"baz": {
+			Name: "baz",
+			Columns: map[string]schema.Column{
+				"id": {
+					Name: "id",
+				},
+				"created_at": {
+					Name: "created_at",
+				},
+			},
+			ReadOnly: true,
+		},
 	},
 }
 
@@ -120,6 +132,11 @@ func TestInvalidInsert(t *testing.T) {
 			"invalid table",
 			`INSERT INTO foononexist (id) VALUES ($1)`,
 			errors.New("invalid table name: foononexist"),
+		},
+		{
+			"read-only table",
+			`INSERT INTO baz (id) VALUES ($1)`,
+			errors.New("read-only table: baz"),
 		},
 		{
 			"invalid column",
@@ -379,6 +396,10 @@ func TestSelect(t *testing.T) {
 			`SELECT id FROM foo WHERE value='bar' AND id=1`,
 		},
 		{
+			"select with where, read-only",
+			`SELECT id FROM baz WHERE created_at='bar' AND id=1`,
+		},
+		{
 			"select with null test",
 			`SELECT id FROM foo WHERE value IS NULL`,
 		},
@@ -388,6 +409,7 @@ func TestSelect(t *testing.T) {
 			FROM foo
 			LEFT JOIN bar b ON b.id = foo.id
 			LEFT JOIN foo f ON f.id = foo.id
+			LEFT JOIN baz bz ON bz.id = foo.id
 			WHERE value IS NULL`,
 		},
 	}
@@ -466,6 +488,11 @@ func TestInvalidUpdate(t *testing.T) {
 			"invalid table",
 			`UPDATE foononexist SET id=1`,
 			errors.New("invalid table name: foononexist"),
+		},
+		{
+			"read-only table",
+			`UPDATE baz SET created_at=1`,
+			errors.New("read-only table: baz"),
 		},
 		{
 			"invalid column",
@@ -553,6 +580,11 @@ func TestInvalidDelete(t *testing.T) {
 			"invalid table",
 			`DELETE FROM foononexist WHERE id=1`,
 			errors.New("invalid table name: foononexist"),
+		},
+		{
+			"read-only table",
+			`DELETE FROM baz WHERE created_at=1`,
+			errors.New("read-only table: baz"),
 		},
 		{
 			"invalid column",

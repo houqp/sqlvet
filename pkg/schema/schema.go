@@ -8,8 +8,9 @@ type Column struct {
 
 // Table represents a table in database
 type Table struct {
-	Name    string
-	Columns map[string]Column
+	Name     string
+	Columns  map[string]Column
+	ReadOnly bool
 }
 
 type Db struct {
