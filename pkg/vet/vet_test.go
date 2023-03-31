@@ -48,6 +48,10 @@ var mockDbSchema = &schema.Db{
 				"created_at": {
 					Name: "created_at",
 				},
+				"baz_count": {
+					Name: "baz_count",
+					Type: "int",
+				},
 			},
 			ReadOnly: true,
 		},
@@ -404,14 +408,44 @@ func TestSelect(t *testing.T) {
 			`SELECT id FROM foo WHERE value IS NULL`,
 		},
 		{
-			"select with multiple joins",
-			`SELECT id
+			"select with join",
+			`SELECT id, coalesce(count,0)
+			FROM foo
+			LEFT JOIN bar b ON b.id = foo.id
+			WHERE value IS NULL`,
+		},
+		{
+			"select with multiple joins with sub select",
+			`SELECT id, coalesce(bzz.created_at,0), coalesce(bzzz.created_at,0)
 			FROM foo
 			LEFT JOIN bar b ON b.id = foo.id
 			LEFT JOIN foo f ON f.id = foo.id
 			LEFT JOIN baz bz ON bz.id = foo.id
+			LEFT JOIN LATERAL (SELECT created_at from baz) bzz ON true
+			LEFT JOIN LATERAL (SELECT created_at from baz) AS bzzz ON true
 			WHERE value IS NULL`,
 		},
+		{
+			"select with single left join",
+			`SELECT id, f.id, coalesce(bzz.created_at,0)
+			FROM foo as f
+			LEFT JOIN LATERAL (
+			    SELECT *, created_at, b.created_at, coalesce(baz_count,0), coalesce(baz_count,0) AS b_created_at 
+			    FROM baz b
+			) bzz ON true
+			WHERE value IS NULL`,
+		},
+		//{
+		//	//TODO fix this test case :  table `f` not available for query
+		//	"select with single left join and linked where",
+		//	`SELECT id, f.id, coalesce(bzz.created_at,0)
+		//	FROM foo as f
+		//	LEFT JOIN LATERAL (
+		//		SELECT *, created_at, b.created_at, coalesce(baz_count,0), coalesce(baz_count,0) as b_created_at
+		//		FROM baz b
+		//		WHERE f.id = b.id) bzz ON true
+		//	WHERE value IS NULL`,
+		//},
 	}
 
 	for _, tcase := range testCases {

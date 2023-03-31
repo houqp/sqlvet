@@ -91,45 +91,8 @@ func parsePostgresSchema(schemaInput string) (map[string]Table, error) {
 					continue
 				}
 
-				if resTarget.Name != "" {
-					table.Columns[resTarget.Name] = Column{
-						Name: resTarget.Name,
-					}
-					continue
-				}
-
-				if resTarget.Val == nil {
-					continue
-				}
-
-				colRef := resTarget.Val.GetColumnRef()
-				if colRef == nil {
-					// parse only column references when no alias is provided
-					continue
-				}
-
-				var colField *pg_query.Node
-				if len(colRef.Fields) > 0 {
-					colField = colRef.Fields[len(colRef.Fields)-1]
-				}
-
-				if colField == nil {
-					continue
-				}
-
-				if colField.GetAStar() != nil {
-					// SELECT * - force parsing explicit columns for simplicity
-					continue
-				}
-
-				if colField.GetString_() == nil {
-					continue
-				}
-
-				colName := colField.GetString_().GetStr()
-				table.Columns[colName] = Column{
-					Name: colName,
-					Type: "", // type not set, never used for validation
+				if col, ok := GetResTargetColumn(resTarget); ok {
+					table.Columns[col.Name] = col
 				}
 			}
 
@@ -138,4 +101,40 @@ func parsePostgresSchema(schemaInput string) (map[string]Table, error) {
 	}
 
 	return tables, nil
+}
+
+func GetResTargetColumn(resTarget *pg_query.ResTarget) (col Column, ok bool) {
+	if resTarget.Name != "" {
+		return Column{Name: resTarget.Name}, true
+	}
+
+	if resTarget.Val == nil {
+		return
+	}
+
+	colRef := resTarget.Val.GetColumnRef()
+	if colRef == nil {
+		// parse only column references when no alias is provided
+		return
+	}
+
+	var colField *pg_query.Node
+	if len(colRef.Fields) > 0 {
+		colField = colRef.Fields[len(colRef.Fields)-1]
+	}
+
+	if colField == nil {
+		return
+	}
+
+	if colField.GetAStar() != nil {
+		// SELECT * - force parsing explicit columns for simplicity
+		return
+	}
+
+	if colField.GetString_() == nil {
+		return
+	}
+
+	return Column{Name: colField.GetString_().GetStr()}, true
 }
