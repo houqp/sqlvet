@@ -12,7 +12,8 @@ import (
 )
 
 type VetContext struct {
-	Schema *schema.Db
+	Schema     *schema.Db
+	UsedTables []TableUsed
 }
 
 type TableUsed struct {
@@ -33,6 +34,7 @@ type QueryParam struct {
 
 type ParseResult struct {
 	Columns []ColumnUsed
+	Tables  []TableUsed
 	Params  []QueryParam
 }
 
@@ -81,10 +83,6 @@ func rangeVarToTableUsed(r *pg_query.RangeVar) TableUsed {
 	return t
 }
 
-func rangeSubselectTableUsed(r *pg_query.Alias) TableUsed {
-	return TableUsed{Name: r.Aliasname}
-}
-
 /* =========================================================================================================
 	this is where the rewrite to nil checks rather than type refleciton starts
  ========================================================================================================= */
@@ -128,18 +126,13 @@ func getUsedTablesFromJoinArg(arg *pg_query.Node) []TableUsed {
 		return append(
 			getUsedTablesFromJoinArg(arg.GetJoinExpr().GetLarg()),
 			getUsedTablesFromJoinArg(arg.GetJoinExpr().GetRarg())...)
-	case arg.GetRangeSubselect() != nil:
-		var alias = arg.GetRangeSubselect().GetAlias()
-		if alias == nil {
-			return []TableUsed{}
-		}
-		return []TableUsed{rangeSubselectTableUsed(alias)}
 	default:
 		return []TableUsed{}
 	}
 }
 
 // extract used tables from FROM clause and JOIN clauses
+// TODO ? maybe this should be moved to parseExpression() and be collected in ParseResult
 func getUsedTablesFromSelectStmt(fromClauseList []*pg_query.Node) []TableUsed {
 	usedTables := []TableUsed{}
 
@@ -437,6 +430,8 @@ func parseRangeSubselect(ctx VetContext, clause *pg_query.RangeSubselect, parseR
 	}
 
 	ctx.Schema.Tables[t.Name] = t
+	parseRe.Tables = append(parseRe.Tables, TableUsed{Name: t.Name})
+
 	return nil
 }
 
@@ -495,8 +490,7 @@ func getUsedColumnsFromSortClause(sortList []*pg_query.Node) []ColumnUsed {
 }
 
 func validateSelectStmt(ctx VetContext, stmt *pg_query.SelectStmt) (queryParams []QueryParam, targetCols []schema.Column, err error) {
-	usedTables := getUsedTablesFromSelectStmt(stmt.FromClause)
-
+	ctx.UsedTables = append(ctx.UsedTables, getUsedTablesFromSelectStmt(stmt.FromClause)...)
 	usedCols := []ColumnUsed{}
 
 	for _, item := range stmt.TargetList {
@@ -530,6 +524,9 @@ func validateSelectStmt(ctx VetContext, stmt *pg_query.SelectStmt) (queryParams 
 		}
 		if len(re.Columns) > 0 {
 			usedCols = append(usedCols, re.Columns...)
+		}
+		if len(re.Tables) > 0 {
+			ctx.UsedTables = append(ctx.UsedTables, re.Tables...)
 		}
 		if len(re.Params) > 0 {
 			AddQueryParams(&queryParams, re.Params)
@@ -583,7 +580,7 @@ func validateSelectStmt(ctx VetContext, stmt *pg_query.SelectStmt) (queryParams 
 		usedCols = append(usedCols, getUsedColumnsFromSortClause(stmt.SortClause)...)
 	}
 
-	return queryParams, targetCols, validateTableColumns(ctx, usedTables, usedCols)
+	return queryParams, targetCols, validateTableColumns(ctx, ctx.UsedTables, usedCols)
 }
 
 func validateUpdateStmt(ctx VetContext, stmt *pg_query.UpdateStmt) ([]QueryParam, error) {

@@ -435,17 +435,16 @@ func TestSelect(t *testing.T) {
 			) bzz ON true
 			WHERE value IS NULL`,
 		},
-		//{
-		//	//TODO fix this test case :  table `f` not available for query
-		//	"select with single left join and linked where",
-		//	`SELECT id, f.id, coalesce(bzz.created_at,0)
-		//	FROM foo as f
-		//	LEFT JOIN LATERAL (
-		//		SELECT *, created_at, b.created_at, coalesce(baz_count,0), coalesce(baz_count,0) as b_created_at
-		//		FROM baz b
-		//		WHERE f.id = b.id) bzz ON true
-		//	WHERE value IS NULL`,
-		//},
+		{
+			"select with single left join and linked where",
+			`SELECT id, f.id, coalesce(bzz.created_at,0)
+			FROM foo as f
+			LEFT JOIN LATERAL (
+				SELECT *, created_at, b.created_at, coalesce(baz_count,0), coalesce(baz_count,0) as b_created_at
+				FROM baz b
+				WHERE f.id = b.id) bzz ON true
+			WHERE value IS NULL`,
+		},
 	}
 
 	for _, tcase := range testCases {
