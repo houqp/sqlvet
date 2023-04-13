@@ -11,9 +11,21 @@ import (
 	"github.com/houqp/sqlvet/pkg/schema"
 )
 
+type Schema struct {
+	Tables map[string]schema.Table
+}
+
+func NewContext(tables map[string]schema.Table) VetContext {
+	return VetContext{
+		Schema:      Schema{Tables: tables},
+		InnerSchema: Schema{Tables: map[string]schema.Table{}},
+	}
+}
+
 type VetContext struct {
-	Schema     *schema.Db
-	UsedTables []TableUsed
+	Schema      Schema
+	InnerSchema Schema
+	UsedTables  []TableUsed
 }
 
 type TableUsed struct {
@@ -32,10 +44,32 @@ type QueryParam struct {
 	// TODO: also store related column type info for analysis
 }
 
+type PostponedNodes struct {
+	RangeSubselectNodes []*pg_query.RangeSubselect
+}
+
+func (p *PostponedNodes) Parse(ctx VetContext, parseRe *ParseResult) (err error) {
+	for _, r := range p.RangeSubselectNodes {
+		if err = parseRangeSubselect(ctx, r, parseRe); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *PostponedNodes) Append(other *PostponedNodes) {
+	if other == nil {
+		return
+	}
+	p.RangeSubselectNodes = append(p.RangeSubselectNodes, other.RangeSubselectNodes...)
+}
+
 type ParseResult struct {
 	Columns []ColumnUsed
 	Tables  []TableUsed
 	Params  []QueryParam
+
+	PostponedNodes *PostponedNodes
 }
 
 // insert query param based on parameter number and avoid deduplications
@@ -190,7 +224,7 @@ func getUsedColumnsFromReturningList(returningList []*pg_query.Node) []ColumnUse
 }
 
 func validateTable(ctx VetContext, tname string, notReadOnly bool) error {
-	if ctx.Schema == nil {
+	if ctx.Schema.Tables == nil {
 		return nil
 	}
 	t, ok := ctx.Schema.Tables[tname]
@@ -204,16 +238,19 @@ func validateTable(ctx VetContext, tname string, notReadOnly bool) error {
 }
 
 func validateTableColumns(ctx VetContext, tables []TableUsed, cols []ColumnUsed) error {
-	if ctx.Schema == nil {
+	if ctx.Schema.Tables == nil || ctx.InnerSchema.Tables == nil {
 		return nil
 	}
 
 	var ok bool
 	usedTables := map[string]schema.Table{}
 	for _, tu := range tables {
-		usedTables[tu.Name], ok = ctx.Schema.Tables[tu.Name]
+		usedTables[tu.Name], ok = ctx.InnerSchema.Tables[tu.Name]
 		if !ok {
-			return fmt.Errorf("invalid table name: %s", tu.Name)
+			usedTables[tu.Name], ok = ctx.Schema.Tables[tu.Name]
+			if !ok {
+				return fmt.Errorf("invalid table name: %s", tu.Name)
+			}
 		}
 		if tu.Alias != "" {
 			usedTables[tu.Alias] = usedTables[tu.Name]
@@ -369,10 +406,15 @@ func parseExpression(ctx VetContext, clause *pg_query.Node, parseRe *ParseResult
 	case clause.GetJoinExpr() != nil:
 		return parseJoinExpr(ctx, clause.GetJoinExpr(), parseRe)
 	case clause.GetRangeVar() != nil:
+		parseRe.Tables = append(parseRe.Tables, rangeVarToTableUsed(clause.GetRangeVar()))
 		return nil
 	case clause.GetRangeSubselect() != nil:
 		// LEFT JOIN LATERAL (SELECT id FROM foo) AS bar ON true
-		return parseRangeSubselect(ctx, clause.GetRangeSubselect(), parseRe)
+		if parseRe.PostponedNodes == nil {
+			parseRe.PostponedNodes = &PostponedNodes{}
+		}
+		parseRe.PostponedNodes.RangeSubselectNodes = append(parseRe.PostponedNodes.RangeSubselectNodes, clause.GetRangeSubselect())
+		return nil
 	default:
 		return fmt.Errorf(
 			"unsupported expression, found node of type: %v (%s)",
@@ -429,7 +471,7 @@ func parseRangeSubselect(ctx VetContext, clause *pg_query.RangeSubselect, parseR
 		t.Columns[col.Name] = col
 	}
 
-	ctx.Schema.Tables[t.Name] = t
+	ctx.InnerSchema.Tables[t.Name] = t
 	parseRe.Tables = append(parseRe.Tables, TableUsed{Name: t.Name})
 
 	return nil
@@ -490,8 +532,41 @@ func getUsedColumnsFromSortClause(sortList []*pg_query.Node) []ColumnUsed {
 }
 
 func validateSelectStmt(ctx VetContext, stmt *pg_query.SelectStmt) (queryParams []QueryParam, targetCols []schema.Column, err error) {
-	ctx.UsedTables = append(ctx.UsedTables, getUsedTablesFromSelectStmt(stmt.FromClause)...)
 	usedCols := []ColumnUsed{}
+
+	postponed := PostponedNodes{}
+	for _, fromClause := range stmt.FromClause {
+		re := &ParseResult{}
+		err := parseFromClause(ctx, fromClause, re)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(re.Columns) > 0 {
+			usedCols = append(usedCols, re.Columns...)
+		}
+		if len(re.Tables) > 0 {
+			ctx.UsedTables = append(ctx.UsedTables, re.Tables...)
+		}
+		if len(re.Params) > 0 {
+			AddQueryParams(&queryParams, re.Params)
+		}
+
+		postponed.Append(re.PostponedNodes)
+	}
+
+	re := &ParseResult{}
+	if err := postponed.Parse(ctx, re); err != nil {
+		return nil, nil, err
+	}
+	if len(re.Columns) > 0 {
+		usedCols = append(usedCols, re.Columns...)
+	}
+	if len(re.Tables) > 0 {
+		ctx.UsedTables = append(ctx.UsedTables, re.Tables...)
+	}
+	if len(re.Params) > 0 {
+		AddQueryParams(&queryParams, re.Params)
+	}
 
 	for _, item := range stmt.TargetList {
 		resTarget := item.GetResTarget()
@@ -513,23 +588,6 @@ func validateSelectStmt(ctx VetContext, stmt *pg_query.SelectStmt) (queryParams 
 
 		if col, ok := schema.GetResTargetColumn(resTarget); ok {
 			targetCols = append(targetCols, col)
-		}
-	}
-
-	for _, fromClause := range stmt.FromClause {
-		re := &ParseResult{}
-		err := parseFromClause(ctx, fromClause, re)
-		if err != nil {
-			return nil, nil, err
-		}
-		if len(re.Columns) > 0 {
-			usedCols = append(usedCols, re.Columns...)
-		}
-		if len(re.Tables) > 0 {
-			ctx.UsedTables = append(ctx.UsedTables, re.Tables...)
-		}
-		if len(re.Params) > 0 {
-			AddQueryParams(&queryParams, re.Params)
 		}
 	}
 

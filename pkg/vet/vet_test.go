@@ -58,7 +58,9 @@ var mockDbSchema = &schema.Db{
 	},
 }
 
-var mockCtx = vet.VetContext{Schema: mockDbSchema}
+func mockCtx() vet.VetContext {
+	return vet.NewContext(mockDbSchema.Tables)
+}
 
 func TestInsert(t *testing.T) {
 	testCases := []struct {
@@ -112,7 +114,7 @@ func TestInsert(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			_, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			_, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			if err != nil {
 				vet.DebugQuery(tcase.Query)
 			}
@@ -243,7 +245,7 @@ func TestInvalidInsert(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			_, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			_, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			if err == nil {
 				vet.DebugQuery(tcase.Query)
 			}
@@ -353,7 +355,7 @@ func TestInvalidSelect(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			if err == nil {
 				vet.DebugQuery(tcase.Query)
 			}
@@ -449,7 +451,7 @@ func TestSelect(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			if err != nil {
 				vet.DebugQuery(tcase.Query)
 			}
@@ -496,7 +498,7 @@ func TestUpdate(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			if err != nil {
 				vet.DebugQuery(tcase.Query)
 			}
@@ -556,7 +558,7 @@ func TestInvalidUpdate(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			assert.Equal(t, tcase.Err, err)
 			assert.Equal(t, 0, len(qparams))
 		})
@@ -588,7 +590,7 @@ func TestDelete(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			if err != nil {
 				vet.DebugQuery(tcase.Query)
 			}
@@ -662,7 +664,7 @@ func TestInvalidDelete(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			assert.Equal(t, tcase.Err, err)
 			assert.Equal(t, 0, len(qparams))
 		})
@@ -709,7 +711,7 @@ func TestQueryParams(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			if err != nil {
 				vet.DebugQuery(tcase.Query)
 			}
