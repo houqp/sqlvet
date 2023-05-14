@@ -40,9 +40,7 @@ func (s *SQLVet) reportError(format string, a ...interface{}) {
 // Vet performs static analysis
 func (s *SQLVet) Vet() {
 	queries, err := vet.CheckDir(
-		vet.VetContext{
-			Schema: s.Schema,
-		},
+		vet.NewContext(s.Schema.Tables),
 		s.ProjectRoot,
 		s.Cfg.BuildFlags,
 		s.Cfg.SqlFuncMatchers,

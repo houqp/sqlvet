@@ -142,7 +142,7 @@ func handleQuery(ctx VetContext, qs *QuerySite) {
 	}
 
 	var queryParams []QueryParam
-	queryParams, qs.Err = ValidateSqlQuery(ctx, qs.Query)
+	queryParams, qs.Err = ValidateSqlQuery(NewContext(ctx.Schema.Tables), qs.Query)
 
 	if qs.Err != nil {
 		return

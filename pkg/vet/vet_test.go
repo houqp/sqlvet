@@ -48,13 +48,19 @@ var mockDbSchema = &schema.Db{
 				"created_at": {
 					Name: "created_at",
 				},
+				"baz_count": {
+					Name: "baz_count",
+					Type: "int",
+				},
 			},
 			ReadOnly: true,
 		},
 	},
 }
 
-var mockCtx = vet.VetContext{Schema: mockDbSchema}
+func mockCtx() vet.VetContext {
+	return vet.NewContext(mockDbSchema.Tables)
+}
 
 func TestInsert(t *testing.T) {
 	testCases := []struct {
@@ -108,7 +114,7 @@ func TestInsert(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			_, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			_, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			if err != nil {
 				vet.DebugQuery(tcase.Query)
 			}
@@ -239,7 +245,7 @@ func TestInvalidInsert(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			_, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			_, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			if err == nil {
 				vet.DebugQuery(tcase.Query)
 			}
@@ -349,7 +355,7 @@ func TestInvalidSelect(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			if err == nil {
 				vet.DebugQuery(tcase.Query)
 			}
@@ -404,19 +410,48 @@ func TestSelect(t *testing.T) {
 			`SELECT id FROM foo WHERE value IS NULL`,
 		},
 		{
-			"select with multiple joins",
-			`SELECT id
+			"select with join",
+			`SELECT id, coalesce(count,0)
+			FROM foo
+			LEFT JOIN bar b ON b.id = foo.id
+			WHERE value IS NULL`,
+		},
+		{
+			"select with multiple joins with sub select",
+			`SELECT id, coalesce(bzz.created_at,0), coalesce(bzzz.created_at,0)
 			FROM foo
 			LEFT JOIN bar b ON b.id = foo.id
 			LEFT JOIN foo f ON f.id = foo.id
 			LEFT JOIN baz bz ON bz.id = foo.id
+			LEFT JOIN LATERAL (SELECT created_at from baz) bzz ON true
+			LEFT JOIN LATERAL (SELECT created_at from baz) AS bzzz ON true
+			WHERE value IS NULL`,
+		},
+		{
+			"select with single left join",
+			`SELECT id, f.id, coalesce(bzz.created_at,0)
+			FROM foo as f
+			LEFT JOIN LATERAL (
+			    SELECT *, created_at, b.created_at, coalesce(baz_count,0), coalesce(baz_count,0) AS b_created_at 
+			    FROM baz b
+			) bzz ON true
+			WHERE value IS NULL`,
+		},
+		{
+			"select with single left join and linked where",
+			`SELECT id, f.id, coalesce(bzz.created_at,0)
+			FROM foo as f
+			LEFT JOIN LATERAL (
+				SELECT *, created_at, b.created_at, coalesce(baz_count,0), coalesce(baz_count,0) as b_created_at
+				FROM baz b
+				WHERE f.id = b.id) bzz ON true
 			WHERE value IS NULL`,
 		},
 	}
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			if err != nil {
 				vet.DebugQuery(tcase.Query)
 			}
@@ -463,7 +498,7 @@ func TestUpdate(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			if err != nil {
 				vet.DebugQuery(tcase.Query)
 			}
@@ -523,7 +558,7 @@ func TestInvalidUpdate(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			assert.Equal(t, tcase.Err, err)
 			assert.Equal(t, 0, len(qparams))
 		})
@@ -555,7 +590,7 @@ func TestDelete(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			if err != nil {
 				vet.DebugQuery(tcase.Query)
 			}
@@ -629,7 +664,7 @@ func TestInvalidDelete(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			assert.Equal(t, tcase.Err, err)
 			assert.Equal(t, 0, len(qparams))
 		})
@@ -676,7 +711,7 @@ func TestQueryParams(t *testing.T) {
 
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
-			qparams, err := vet.ValidateSqlQuery(mockCtx, tcase.Query)
+			qparams, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
 			if err != nil {
 				vet.DebugQuery(tcase.Query)
 			}
