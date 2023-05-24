@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	pg_query "github.com/pganalyze/pg_query_go/v2"
+	pg_query "github.com/pganalyze/pg_query_go/v4"
 )
 
 func (s *Db) LoadPostgres(schemaPath string) error {
@@ -53,7 +53,7 @@ func parsePostgresSchema(schemaInput string) (map[string]Table, error) {
 						continue
 					}
 					tStr := typNode.GetString_()
-					typeParts = append(typeParts, tStr.Str)
+					typeParts = append(typeParts, tStr.Sval)
 				}
 
 				colName := colDef.Colname
@@ -136,5 +136,5 @@ func GetResTargetColumn(resTarget *pg_query.ResTarget) (col Column, ok bool) {
 		return
 	}
 
-	return Column{Name: colField.GetString_().GetStr()}, true
+	return Column{Name: colField.GetString_().Sval}, true
 }
