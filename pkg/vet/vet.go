@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
-	pg_query "github.com/pganalyze/pg_query_go/v2"
+	pg_query "github.com/pganalyze/pg_query_go/v4"
 
 	"github.com/houqp/sqlvet/pkg/schema"
 )
@@ -130,7 +130,7 @@ func columnRefToColumnUsed(colRef *pg_query.ColumnRef) *ColumnUsed {
 	var colField *pg_query.Node
 	if len(colRef.Fields) > 1 {
 		// in the form of SELECT table.column FROM table
-		cu.Table = colRef.Fields[0].GetString_().Str
+		cu.Table = colRef.Fields[0].GetString_().Sval
 		// fmt.Printf("table: %s\n", cu.Table)
 		colField = colRef.Fields[1]
 	} else {
@@ -140,7 +140,7 @@ func columnRefToColumnUsed(colRef *pg_query.ColumnRef) *ColumnUsed {
 
 	switch {
 	case colField.GetString_() != nil:
-		cu.Column = colField.GetString_().GetStr()
+		cu.Column = colField.GetString_().Sval
 	case colField.GetAStar() != nil:
 		// SELECT *
 		return nil
