@@ -11,7 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/houqp/sqlvet/pkg/vet"
+	"github.com/space307/sqlvet/pkg/vet"
 )
 
 type GoSourceTmpDir struct{}
@@ -22,7 +22,7 @@ func (s GoSourceTmpDir) Construct(t *testing.T, fixtures struct{}) (string, stri
 
 	modpath := filepath.Join(dir, "go.mod")
 	err = ioutil.WriteFile(modpath, []byte(`
-module github.com/houqp/sqlvettest
+module github.com/space307/sqlvettest
 	`), 0644)
 	assert.NoError(t, err)
 

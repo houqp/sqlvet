@@ -7,8 +7,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/houqp/sqlvet/pkg/schema"
-	"github.com/houqp/sqlvet/pkg/vet"
+	"github.com/pganalyze/pg_query_go/v4/parser"
+	"github.com/space307/sqlvet/pkg/schema"
+	"github.com/space307/sqlvet/pkg/vet"
 )
 
 var mockDbSchema = &schema.Db{
@@ -132,7 +133,14 @@ func TestInvalidInsert(t *testing.T) {
 		{
 			"invalid syntax",
 			`INSERT INTO foo (id,) VALUES ($1)`,
-			errors.New("syntax error at or near \")\""),
+			&parser.Error{
+				Message:   `syntax error at or near ")"`,
+				Funcname:  "scanner_yyerror",
+				Filename:  "scan.l",
+				Lineno:    1198,
+				Cursorpos: 21,
+				Context:   "",
+			},
 		},
 		{
 			"invalid table",
@@ -263,7 +271,14 @@ func TestInvalidSelect(t *testing.T) {
 		{
 			"invalid syntax",
 			`SELECT id, FROM foo`,
-			errors.New("syntax error at or near \"FROM\""),
+			&parser.Error{
+				Message:   `syntax error at or near "FROM"`,
+				Funcname:  "scanner_yyerror",
+				Filename:  "scan.l",
+				Lineno:    1198,
+				Cursorpos: 12,
+				Context:   "",
+			},
 		},
 		{
 			"invalid table",
@@ -517,7 +532,14 @@ func TestInvalidUpdate(t *testing.T) {
 		{
 			"invalid syntax",
 			`UPDATE foo, SET id=1`,
-			errors.New("syntax error at or near \",\""),
+			&parser.Error{
+				Message:   `syntax error at or near ","`,
+				Funcname:  "scanner_yyerror",
+				Filename:  "scan.l",
+				Lineno:    1198,
+				Cursorpos: 11,
+				Context:   "",
+			},
 		},
 		{
 			"invalid table",
@@ -609,7 +631,14 @@ func TestInvalidDelete(t *testing.T) {
 		{
 			"invalid syntax",
 			`DELETE FROM foo, WHERE id=1`,
-			errors.New("syntax error at or near \",\""),
+			&parser.Error{
+				Message:   `syntax error at or near ","`,
+				Funcname:  "scanner_yyerror",
+				Filename:  "scan.l",
+				Lineno:    1198,
+				Cursorpos: 16,
+				Context:   "",
+			},
 		},
 		{
 			"invalid table",
