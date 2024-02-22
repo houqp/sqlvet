@@ -7,9 +7,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/houqp/sqlvet/pkg/schema"
+	"github.com/houqp/sqlvet/pkg/vet"
 	"github.com/pganalyze/pg_query_go/v4/parser"
-	"github.com/space307/sqlvet/pkg/schema"
-	"github.com/space307/sqlvet/pkg/vet"
 )
 
 var mockDbSchema = &schema.Db{

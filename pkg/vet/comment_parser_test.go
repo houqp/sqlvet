@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/space307/sqlvet/pkg/vet"
+	"github.com/houqp/sqlvet/pkg/vet"
 )
 
 func TestParseComment(t *testing.T) {

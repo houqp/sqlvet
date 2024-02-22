@@ -21,7 +21,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/space307/sqlvet/pkg/parseutil"
+	"github.com/houqp/sqlvet/pkg/parseutil"
 )
 
 var (

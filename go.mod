@@ -1,4 +1,4 @@
-module github.com/space307/sqlvet
+module github.com/houqp/sqlvet
 
 go 1.22
 

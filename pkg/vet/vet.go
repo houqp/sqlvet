@@ -8,7 +8,7 @@ import (
 
 	pg_query "github.com/pganalyze/pg_query_go/v4"
 
-	"github.com/space307/sqlvet/pkg/schema"
+	"github.com/houqp/sqlvet/pkg/schema"
 )
 
 type Schema struct {

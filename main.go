@@ -9,13 +9,13 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	"github.com/space307/sqlvet/pkg/cli"
-	"github.com/space307/sqlvet/pkg/config"
-	"github.com/space307/sqlvet/pkg/schema"
-	"github.com/space307/sqlvet/pkg/vet"
+	"github.com/houqp/sqlvet/pkg/cli"
+	"github.com/houqp/sqlvet/pkg/config"
+	"github.com/houqp/sqlvet/pkg/schema"
+	"github.com/houqp/sqlvet/pkg/vet"
 )
 
-const version = "1.2.0"
+const version = "1.1.6"
 
 var (
 	gitCommit     = "?"

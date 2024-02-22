@@ -1,8 +1,8 @@
 # Sqlvet
 
-[![goreportcard](https://goreportcard.com/badge/github.com/space307/sqlvet)](https://goreportcard.com/report/github.com/space307/sqlvet)
+[![goreportcard](https://goreportcard.com/badge/github.com/houqp/sqlvet)](https://goreportcard.com/report/github.com/houqp/sqlvet)
 [![codecov](https://codecov.io/gh/houqp/sqlvet/branch/master/graphs/badge.svg?branch=master)](https://codecov.io/gh/houqp/sqlvet)
-[![build-status](https://github.com/space307/sqlvet/workflows/build/badge.svg)](https://github.com/space307/sqlvet/actions)
+[![build-status](https://github.com/houqp/sqlvet/workflows/build/badge.svg)](https://github.com/houqp/sqlvet/actions)
 
 Sqlvet performs static analysis on raw SQL queries in your Go code base to
 surface potential runtime errors at build time.
@@ -30,14 +30,14 @@ Go less than 1.18:
 
 
 ```sh
-$ go get github.com/space307/sqlvet
+$ go get github.com/houqp/sqlvet
 ```
 
 Go greater or equal 1.18:
 
 
 ```sh
-$ go install github.com/space307/sqlvet@latest
+$ go install github.com/houqp/sqlvet@latest
 ```
 
 ### Zero conf
