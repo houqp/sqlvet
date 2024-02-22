@@ -1,16 +1,19 @@
-module github.com/houqp/sqlvet
+module github.com/space307/sqlvet
 
-go 1.19
+go 1.22
+
+toolchain go1.22.0
 
 require (
 	github.com/houqp/gtest v1.0.0
 	github.com/logrusorgru/aurora v2.0.3+incompatible
 	github.com/pelletier/go-toml v1.9.5
-	github.com/pganalyze/pg_query_go/v4 v4.2.0
+	github.com/pganalyze/pg_query_go/v4 v4.2.3
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/cobra v1.6.1
 	github.com/stretchr/testify v1.8.1
-	golang.org/x/tools v0.3.0
+	golang.org/x/tools v0.18.0
+	golang.org/x/tools/go/pointer v0.1.0-deprecated
 )
 
 require (
@@ -20,8 +23,8 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/mod v0.7.0 // indirect
-	golang.org/x/sys v0.2.0 // indirect
+	golang.org/x/mod v0.15.0 // indirect
+	golang.org/x/sys v0.17.0 // indirect
 	google.golang.org/protobuf v1.23.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

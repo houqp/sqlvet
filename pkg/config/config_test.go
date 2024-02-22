@@ -9,7 +9,7 @@ import (
 	"github.com/houqp/gtest"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/houqp/sqlvet/pkg/config"
+	"github.com/space307/sqlvet/pkg/config"
 )
 
 type ConfigTmpDir struct{}

@@ -7,7 +7,7 @@ import (
 
 	"github.com/pelletier/go-toml"
 
-	"github.com/houqp/sqlvet/pkg/vet"
+	"github.com/space307/sqlvet/pkg/vet"
 )
 
 // Sqlvet project config
