@@ -15,7 +15,7 @@ import (
 	"github.com/space307/sqlvet/pkg/vet"
 )
 
-const version = "1.1.6"
+const version = "1.2.0"
 
 var (
 	gitCommit     = "?"
