@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"reflect"
 
-	pg_query "github.com/pganalyze/pg_query_go/v4"
-
 	"github.com/houqp/sqlvet/pkg/schema"
+	pg_query "github.com/pganalyze/pg_query_go/v4"
 )
 
 type Schema struct {
@@ -503,6 +502,14 @@ func parseWhereClause(ctx VetContext, clause *pg_query.Node, parseRe *ParseResul
 	return err
 }
 
+func parseUsingClause(ctx VetContext, clause *pg_query.Node, parseRe *ParseResult) error {
+	err := parseExpression(ctx, clause, parseRe)
+	if err != nil {
+		err = fmt.Errorf("invalid USING clause: %w", err)
+	}
+	return err
+}
+
 func getUsedColumnsFromNodeList(nodelist []*pg_query.Node) []ColumnUsed {
 	usedCols := []ColumnUsed{}
 	for _, item := range nodelist {
@@ -820,12 +827,19 @@ func validateInsertStmt(ctx VetContext, stmt *pg_query.InsertStmt) ([]QueryParam
 
 func validateDeleteStmt(ctx VetContext, stmt *pg_query.DeleteStmt) ([]QueryParam, error) {
 	tableName := stmt.Relation.Relname
+	var tableAlias string
+
+	if stmt.Relation.Alias != nil {
+		tableAlias = stmt.Relation.Alias.Aliasname
+	}
+
 	if err := validateTable(ctx, tableName, true); err != nil {
 		return nil, err
 	}
 
 	usedCols := []ColumnUsed{}
 	queryParams := []QueryParam{}
+	usedTables := []TableUsed{}
 
 	if stmt.WhereClause != nil {
 		re := &ParseResult{}
@@ -835,10 +849,23 @@ func validateDeleteStmt(ctx VetContext, stmt *pg_query.DeleteStmt) ([]QueryParam
 		}
 		if len(re.Columns) > 0 {
 			usedCols = append(usedCols, re.Columns...)
+		} else {
+			return nil, fmt.Errorf("no columns in DELETE's WHERE clause")
 		}
 		if len(re.Params) > 0 {
 			queryParams = re.Params
 		}
+	} else {
+		return nil, fmt.Errorf("no WHERE clause for DELETE")
+	}
+
+	for _, using := range stmt.UsingClause {
+		re := &ParseResult{}
+		err := parseUsingClause(ctx, using, re)
+		if err != nil {
+			return nil, err
+		}
+		usedTables = append(usedTables, re.Tables...)
 	}
 
 	if len(stmt.ReturningList) > 0 {
@@ -847,7 +874,7 @@ func validateDeleteStmt(ctx VetContext, stmt *pg_query.DeleteStmt) ([]QueryParam
 	}
 
 	if len(usedCols) > 0 {
-		usedTables := []TableUsed{{Name: tableName}}
+		usedTables = append(usedTables, TableUsed{Name: tableName, Alias: tableAlias})
 		if err := validateTableColumns(ctx, usedTables, usedCols); err != nil {
 			return nil, err
 		}

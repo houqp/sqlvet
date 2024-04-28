@@ -571,10 +571,6 @@ func TestDelete(t *testing.T) {
 		Query string
 	}{
 		{
-			"delete all",
-			`DELETE FROM foo`,
-		},
-		{
 			"delete with where",
 			`DELETE FROM foo WHERE id=1 AND value='bar'`,
 		},
@@ -584,7 +580,15 @@ func TestDelete(t *testing.T) {
 		},
 		{
 			"delete with returning",
-			`DELETE FROM foo RETURNING id`,
+			`DELETE FROM foo WHERE id>1 RETURNING id`,
+		},
+		{
+			"delete using",
+			`DELETE FROM foo USING bar WHERE foo.id = bar.id`,
+		},
+		{
+			"delete using with aliases",
+			`DELETE FROM foo AS f USING bar b WHERE f.id = b.id`,
 		},
 	}
 
@@ -657,8 +661,18 @@ func TestInvalidDelete(t *testing.T) {
 		},
 		{
 			"invalid column in return clause",
-			`DELETE FROM foo RETURNING uid`,
+			`DELETE FROM foo WHERE id = 1 RETURNING uid`,
 			errors.New("column `uid` is not defined in table `foo`"),
+		},
+		{
+			"no where clause",
+			`DELETE FROM foo`,
+			errors.New("no WHERE clause for DELETE"),
+		},
+		{
+			"no columns in where clause",
+			`DELETE FROM foo WHERE 1=1`,
+			errors.New("no columns in DELETE's WHERE clause"),
 		},
 	}
 
