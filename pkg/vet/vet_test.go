@@ -432,7 +432,7 @@ func TestSelect(t *testing.T) {
 			`SELECT id, f.id, coalesce(bzz.created_at,0)
 			FROM foo as f
 			LEFT JOIN LATERAL (
-			    SELECT *, created_at, b.created_at, coalesce(baz_count,0), coalesce(baz_count,0) AS b_created_at 
+			    SELECT *, created_at, b.created_at, coalesce(baz_count,0), coalesce(baz_count,0) AS b_created_at
 			    FROM baz b
 			) bzz ON true
 			WHERE value IS NULL`,
@@ -446,6 +446,17 @@ func TestSelect(t *testing.T) {
 				FROM baz b
 				WHERE f.id = b.id) bzz ON true
 			WHERE value IS NULL`,
+		},
+		{
+			"select CTE",
+			`WITH cte1 AS (SELECT id FROM foo)
+					SELECT id FROM cte1`,
+		},
+		{
+			"select 2 CTEs",
+			`WITH cte1 AS (SELECT id FROM foo),
+                         cte2 AS (SELECT value FROM foo)
+					SELECT c1.id, c2.value FROM cte1 c1, cte2 c2`,
 		},
 	}
 
@@ -493,6 +504,15 @@ func TestUpdate(t *testing.T) {
 		{
 			"update with returning",
 			`UPDATE foo SET id=1 RETURNING value`,
+		},
+		{
+			"update alias with returning",
+			`UPDATE foo f SET id=1 RETURNING f.value`,
+		},
+		{
+			"update CTE",
+			`WITH cte1 AS (SELECT id FROM foo)
+					UPDATE foo SET value='bar' FROM cte1 WHERE foo.id = cte1.id`,
 		},
 	}
 
@@ -589,6 +609,11 @@ func TestDelete(t *testing.T) {
 		{
 			"delete using with aliases",
 			`DELETE FROM foo AS f USING bar b WHERE f.id = b.id`,
+		},
+		{
+			"delete CTE",
+			`WITH cte1 AS (SELECT id FROM foo)
+					DELETE FROM foo USING cte1 WHERE foo.id = cte1.id`,
 		},
 	}
 
