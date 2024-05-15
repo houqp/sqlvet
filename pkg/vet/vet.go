@@ -277,7 +277,7 @@ func validateTableColumns(ctx VetContext, tables []TableUsed, cols []ColumnUsed)
 				}
 			}
 			if !found {
-				if len(tables) == 1 {
+				if len(usedTables) == 1 {
 					// to make error message more useful, if only one table is
 					// referenced in the query, it's safe to assume user only
 					// want to use columns from that table.
