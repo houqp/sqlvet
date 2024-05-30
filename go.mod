@@ -6,7 +6,7 @@ require (
 	github.com/houqp/gtest v1.0.0
 	github.com/logrusorgru/aurora v2.0.3+incompatible
 	github.com/pelletier/go-toml v1.9.5
-	github.com/pganalyze/pg_query_go/v4 v4.2.0
+	github.com/pganalyze/pg_query_go/v5 v5.1.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/cobra v1.6.1
 	github.com/stretchr/testify v1.8.1
@@ -17,7 +17,6 @@ require (
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/structtag v1.2.0 // indirect
-	github.com/golang/protobuf v1.5.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
