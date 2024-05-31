@@ -249,7 +249,7 @@ func TestInvalidInsert(t *testing.T) {
 			if err == nil {
 				vet.DebugQuery(tcase.Query)
 			}
-			assert.Equal(t, tcase.Err, err)
+			assert.EqualError(t, err, tcase.Err.Error())
 		})
 	}
 }
@@ -359,7 +359,7 @@ func TestInvalidSelect(t *testing.T) {
 			if err == nil {
 				vet.DebugQuery(tcase.Query)
 			}
-			assert.Equal(t, tcase.Err, err)
+			assert.EqualError(t, err, tcase.Err.Error())
 			assert.Equal(t, 0, len(qparams))
 		})
 	}
@@ -579,7 +579,7 @@ func TestInvalidUpdate(t *testing.T) {
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
 			qparams, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
-			assert.Equal(t, tcase.Err, err)
+			assert.EqualError(t, err, tcase.Err.Error())
 			assert.Equal(t, 0, len(qparams))
 		})
 	}
@@ -704,7 +704,7 @@ func TestInvalidDelete(t *testing.T) {
 	for _, tcase := range testCases {
 		t.Run(tcase.Name, func(t *testing.T) {
 			qparams, err := vet.ValidateSqlQuery(mockCtx(), tcase.Query)
-			assert.Equal(t, tcase.Err, err)
+			assert.EqualError(t, err, tcase.Err.Error())
 			assert.Equal(t, 0, len(qparams))
 		})
 	}
