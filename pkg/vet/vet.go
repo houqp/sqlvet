@@ -958,6 +958,25 @@ func ValidateSqlQuery(ctx VetContext, queryStr string) ([]QueryParam, error) {
 	return params, err
 }
 
+func ValidateSqlQueries(ctx VetContext, queryStr string) ([][]QueryParam, error) {
+	var ret [][]QueryParam
+
+	tree, err := pg_query.Parse(queryStr)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, s := range tree.Stmts {
+		params, _, err := validateSqlQuery(ctx, s.Stmt)
+		if err != nil {
+			return nil, err
+		}
+		ret = append(ret, params)
+	}
+
+	return ret, nil
+}
+
 func validateSqlQuery(ctx VetContext, node *pg_query.Node) ([]QueryParam, []ColumnUsed, error) {
 
 	switch {
