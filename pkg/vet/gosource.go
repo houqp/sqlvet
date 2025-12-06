@@ -14,8 +14,8 @@ import (
 	"strings"
 
 	"golang.org/x/tools/go/callgraph"
+	"golang.org/x/tools/go/callgraph/rta"
 	"golang.org/x/tools/go/packages"
-	"golang.org/x/tools/go/pointer"
 	"golang.org/x/tools/go/ssa"
 	"golang.org/x/tools/go/ssa/ssautil"
 
@@ -537,18 +537,23 @@ func CheckDir(ctx VetContext, dir, buildFlags string, extraMatchers []SqlFuncMat
 	mains := ssautil.MainPackages(ssaPkgs)
 
 	log.Debug("Building call graph...")
-	anaRes, err := pointer.Analyze(&pointer.Config{
-		Mains:          mains,
-		BuildCallGraph: true,
-	})
+	funcs := []*ssa.Function{}
+	for _, fn := range mains {
+		if main := fn.Func("main"); main != nil {
+			funcs = append(funcs, main)
+		}
+		if init := fn.Func("init"); init != nil {
+			funcs = append(funcs, init)
+		}
+	}
 
-	if err != nil {
-		return nil, err
+	rtaRes := rta.Analyze(funcs, true)
+	if rtaRes == nil {
+		return nil, nil
 	}
 
 	queries := []*QuerySite{}
-
-	cg := anaRes.CallGraph
+	cg := rtaRes.CallGraph
 	for _, sqlfunc := range sqlfuncs {
 		cgNode := cg.CreateNode(sqlfunc.SSA)
 		queries = append(

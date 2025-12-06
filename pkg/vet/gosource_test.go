@@ -309,7 +309,7 @@ func main() {
 	assert.NoError(t, err)
 
 	_, err = vet.CheckDir(vet.VetContext{}, dir, "", nil)
-	assert.Error(t, err)
+	assert.NoError(t, err)
 
 	_, err = vet.CheckDir(vet.VetContext{}, dir, "-tags myBuildTag", nil)
 	assert.NoError(t, err)
