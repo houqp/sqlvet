@@ -7,7 +7,7 @@ import (
 	"reflect"
 
 	"github.com/houqp/sqlvet/pkg/schema"
-	pg_query "github.com/pganalyze/pg_query_go/v5"
+	pg_query "github.com/pganalyze/pg_query_go/v6"
 )
 
 type Schema struct {
