@@ -518,7 +518,8 @@ func CheckDir(ctx VetContext, dir, buildFlags string, extraMatchers []SqlFuncMat
 		}
 	}
 
-	prog, ssaPkgs := ssautil.Packages(pkgs, 0)
+	mode := ssa.InstantiateGenerics
+	prog, ssaPkgs := ssautil.Packages(pkgs, mode)
 	log.Debug("Performaing whole-program analysis...")
 	prog.Build()
 
