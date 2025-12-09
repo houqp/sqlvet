@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	pg_query "github.com/pganalyze/pg_query_go/v5"
+	pg_query "github.com/pganalyze/pg_query_go/v6"
 )
 
 func (s *Db) LoadPostgres(schemaPath string) error {
