@@ -414,6 +414,36 @@ func parseExpression(ctx VetContext, clause *pg_query.Node, parseRe *ParseResult
 		}
 		parseRe.PostponedNodes.RangeSubselectNodes = append(parseRe.PostponedNodes.RangeSubselectNodes, clause.GetRangeSubselect())
 		return nil
+	case clause.GetCaseExpr() != nil:
+		// CASE WHEN condition THEN result ELSE default END
+		caseExpr := clause.GetCaseExpr()
+
+		// Parse all WHEN clauses
+		for _, arg := range caseExpr.Args {
+			if caseWhen := arg.GetCaseWhen(); caseWhen != nil {
+				// Parse the WHEN condition
+				if caseWhen.Expr != nil {
+					if err := parseExpression(ctx, caseWhen.Expr, parseRe); err != nil {
+						return err
+					}
+				}
+				// Parse the THEN result
+				if caseWhen.Result != nil {
+					if err := parseExpression(ctx, caseWhen.Result, parseRe); err != nil {
+						return err
+					}
+				}
+			}
+		}
+
+		// Parse the ELSE default result
+		if caseExpr.Defresult != nil {
+			if err := parseExpression(ctx, caseExpr.Defresult, parseRe); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	default:
 		return fmt.Errorf(
 			"unsupported expression, found node of type: %v (%s)",
