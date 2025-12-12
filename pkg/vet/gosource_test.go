@@ -11,6 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/houqp/sqlvet/pkg/schema"
 	"github.com/houqp/sqlvet/pkg/vet"
 )
 
@@ -21,7 +22,7 @@ func (s GoSourceTmpDir) Construct(t *testing.T, fixtures struct{}) (string, stri
 	assert.NoError(t, err)
 
 	modpath := filepath.Join(dir, "go.mod")
-	err = ioutil.WriteFile(modpath, []byte(`
+	err = os.WriteFile(modpath, []byte(`
 module github.com/houqp/sqlvettest
 	`), 0644)
 	assert.NoError(t, err)
@@ -52,7 +53,7 @@ func (s *GoSourceTests) SubTestInvalidSyntax(t *testing.T, fixtures struct {
 	dir := fixtures.TmpDir
 
 	fpath := filepath.Join(dir, "main.go")
-	err := ioutil.WriteFile(fpath, []byte(`
+	err := os.WriteFile(fpath, []byte(`
 package main
 
 func main() {
@@ -102,7 +103,7 @@ func main() {
 	`)
 
 	fpath := filepath.Join(dir, "main.go")
-	err := ioutil.WriteFile(fpath, source, 0644)
+	err := os.WriteFile(fpath, source, 0644)
 	assert.NoError(t, err)
 
 	queries, err := vet.CheckDir(vet.VetContext{}, dir, "", nil)
@@ -159,7 +160,7 @@ func main() {
 	`)
 
 	fpath := filepath.Join(dir, "main.go")
-	err := ioutil.WriteFile(fpath, source, 0644)
+	err := os.WriteFile(fpath, source, 0644)
 	assert.NoError(t, err)
 
 	queries, err := vet.CheckDir(vet.VetContext{}, dir, "", nil)
@@ -191,6 +192,165 @@ func main() {
 	assert.Equal(t, "SELECT id FROM foo", queries[5].Query)
 }
 
+func (s *GoSourceTests) SubTestPkgDatabaseSqlxWithCustomWrapperAndRebindForDB(t *testing.T, fixtures struct {
+	TmpDir string `fixture:"GoSourceTmpDir"`
+}) {
+	dir := fixtures.TmpDir
+
+	source := []byte(`
+package main
+
+import (
+	"context"
+	"github.com/jmoiron/sqlx"
+	"database/sql"
+)
+
+type CustomWrapper interface {
+	sqlx.QueryerContext
+	sqlx.ExecerContext
+
+	SelectContext(ctx context.Context, dest any, query string, args ...any) error
+	GetContext(ctx context.Context, dest any, query string, args ...any) error
+	NamedExecContext(ctx context.Context, query string, arg any) (sql.Result, error)
+	BindNamed(query string, arg any) (string, []any, error)
+	Rebind(query string) string
+}
+
+func main() {
+	var ctx = context.Background()
+	const queryTmpl = "SELECT * FROM test_schema.test_table WHERE id IN (?);"
+	var query, data, err = sqlx.In(queryTmpl, getArgs()) // sqlvet: ignore
+	if err != nil {
+		panic(err)
+	}
+
+	var db CustomWrapper = &sqlx.DB{}
+	var entities []any
+	if err := db.GetContext(ctx, &entities, db.Rebind(query), data...); err != nil {
+		panic(err) 
+	}
+}
+
+func getArgs() []string {
+	return []string{"one","two"}
+}
+	`)
+
+	fpath := filepath.Join(dir, "main.go")
+	err := os.WriteFile(fpath, source, 0644)
+	assert.NoError(t, err)
+
+	gomod := `
+module github.com/houqp/sqlvet
+
+go 1.24.0
+
+require github.com/jmoiron/sqlx v1.4.0`
+	fpathGoMod := filepath.Join(dir, "go.mod")
+	err = os.WriteFile(fpathGoMod, []byte(gomod), 0644)
+	assert.NoError(t, err)
+
+	gosum := `
+	github.com/jmoiron/sqlx v1.4.0 h1:1PLqN7S1UYp5t4SrVVnt4nUVNemrDAtxlulVe+Qgm3o=
+	github.com/jmoiron/sqlx v1.4.0/go.mod h1:ZrZ7UsYB/weZdl2Bxg6jCRO9c3YHl8r3ahlKmRT4JLY=
+	`
+	fpathGoSum := filepath.Join(dir, "go.sum")
+	err = os.WriteFile(fpathGoSum, []byte(gosum), 0644)
+	assert.NoError(t, err)
+
+	queries, err := vet.CheckDir(vet.VetContext{}, dir, "", nil)
+	if err != nil {
+		t.Fatalf("Failed to load package: %s", err.Error())
+		return
+	}
+	assert.Equal(t, 0, len(queries))
+}
+
+func (s *GoSourceTests) SubTestPkgDatabaseSqlxWithCustomWrapperAndTypeConversion(t *testing.T, fixtures struct {
+	TmpDir string `fixture:"GoSourceTmpDir"`
+}) {
+	dir := fixtures.TmpDir
+
+	source := []byte(`
+package main
+
+import (
+	"context"
+	"github.com/jmoiron/sqlx"
+	"database/sql"
+)
+
+type CustomWrapper interface {
+	sqlx.QueryerContext
+	sqlx.ExecerContext
+
+	SelectContext(ctx context.Context, dest any, query string, args ...any) error
+	GetContext(ctx context.Context, dest any, query string, args ...any) error
+	NamedExecContext(ctx context.Context, query string, arg any) (sql.Result, error)
+	BindNamed(query string, arg any) (string, []any, error)
+	Rebind(query string) string
+}
+
+func main() {
+	var ctx = context.Background()
+	const query = "SELECT CASE WHEN id = 'test1' AND coalesce((jsonbField::jsonb)->>'in_field', '') <> 'test2' THEN (jsonbField::jsonb) - 'in_field_2' ELSE jsonbField::jsonb END AS jsonbField FROM test_schema.test_tbl WHERE id = $1;"
+
+	var db CustomWrapper = &sqlx.DB{}
+	var entities []any
+	if err := db.SelectContext(ctx, &entities, query, "test1"); err != nil {
+		panic(err)
+	}
+}
+	`)
+
+	fpath := filepath.Join(dir, "main.go")
+	err := os.WriteFile(fpath, source, 0644)
+	assert.NoError(t, err)
+
+	gomod := `
+module github.com/houqp/sqlvet
+
+go 1.24.0
+
+require github.com/jmoiron/sqlx v1.4.0`
+	fpathGoMod := filepath.Join(dir, "go.mod")
+	err = os.WriteFile(fpathGoMod, []byte(gomod), 0644)
+	assert.NoError(t, err)
+
+	gosum := `
+	github.com/jmoiron/sqlx v1.4.0 h1:1PLqN7S1UYp5t4SrVVnt4nUVNemrDAtxlulVe+Qgm3o=
+	github.com/jmoiron/sqlx v1.4.0/go.mod h1:ZrZ7UsYB/weZdl2Bxg6jCRO9c3YHl8r3ahlKmRT4JLY=
+	`
+	fpathGoSum := filepath.Join(dir, "go.sum")
+	err = os.WriteFile(fpathGoSum, []byte(gosum), 0644)
+	assert.NoError(t, err)
+
+	schemaCtx := vet.NewContext(map[string]schema.Table{
+		"test_tbl": {
+			Name: "test_tbl",
+			Columns: map[string]schema.Column{
+				"id":         {Name: "id", Type: "text"},
+				"jsonbfield": {Name: "jsonbfield", Type: "jsonb"},
+			},
+		},
+	})
+
+	queries, err := vet.CheckDir(schemaCtx, dir, "", nil)
+	if err != nil {
+		t.Fatalf("Failed to load package: %s", err.Error())
+		return
+	}
+
+	// Expect 2 queries (one for DB, one for Tx implementation)
+	// Both should validate successfully with :: operators preserved
+	assert.Equal(t, 2, len(queries))
+	for _, q := range queries {
+		assert.NoError(t, q.Err)
+		assert.Contains(t, q.Query, "::")
+	}
+}
+
 // run sqlvet from parent dir
 func (s *GoSourceTests) SubTestCheckRelativeDir(t *testing.T, fixtures struct {
 	TmpDir string `fixture:"GoSourceTmpDir"`
@@ -205,7 +365,7 @@ func main() {
 	`)
 
 	fpath := filepath.Join(dir, "main.go")
-	err := ioutil.WriteFile(fpath, source, 0644)
+	err := os.WriteFile(fpath, source, 0644)
 	assert.NoError(t, err)
 
 	cwd, err := os.Getwd()
@@ -255,7 +415,7 @@ func main() {
 	`)
 
 	fpath := filepath.Join(dir, "main.go")
-	err := ioutil.WriteFile(fpath, source, 0644)
+	err := os.WriteFile(fpath, source, 0644)
 	assert.NoError(t, err)
 
 	queries, err := vet.CheckDir(vet.VetContext{}, dir, "", nil)
@@ -305,7 +465,7 @@ func main() {
 `)
 
 	fpath := filepath.Join(dir, "main.go")
-	err := ioutil.WriteFile(fpath, source, 0644)
+	err := os.WriteFile(fpath, source, 0644)
 	assert.NoError(t, err)
 
 	_, err = vet.CheckDir(vet.VetContext{}, dir, "", nil)
