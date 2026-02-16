@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync/atomic"
 
 	log "github.com/sirupsen/logrus"
@@ -18,8 +19,9 @@ import (
 const version = "1.1.11"
 
 var (
-	gitCommit     = "?"
-	flagErrFormat = false
+	gitCommit      = "?"
+	flagErrFormat  = false
+	flagSortOutput = false
 )
 
 // SQLVet includes Everything needed for check actions
@@ -30,6 +32,7 @@ type SQLVet struct {
 	Cfg         config.Config
 	ProjectRoot string
 	Schema      *schema.Db
+	SortOutput  bool
 }
 
 func (s *SQLVet) reportError(format string, a ...interface{}) {
@@ -47,6 +50,16 @@ func (s *SQLVet) Vet() {
 	)
 	if err != nil {
 		cli.Exit(err)
+	}
+
+	// Sort queries by filename and line number if flag is set
+	if s.SortOutput {
+		sort.Slice(queries, func(i, j int) bool {
+			if queries[i].Position.Filename != queries[j].Position.Filename {
+				return queries[i].Position.Filename < queries[j].Position.Filename
+			}
+			return queries[i].Position.Line < queries[j].Position.Line
+		})
 	}
 
 	for _, q := range queries {
@@ -96,7 +109,7 @@ func (s *SQLVet) PrintSummary() {
 }
 
 // NewSQLVet creates SQLVet for a given project dir
-func NewSQLVet(projectRoot string) (*SQLVet, error) {
+func NewSQLVet(projectRoot string, sortOutput bool) (*SQLVet, error) {
 	cfg, err := config.Load(projectRoot)
 	if err != nil {
 		return nil, err
@@ -124,6 +137,7 @@ func NewSQLVet(projectRoot string) (*SQLVet, error) {
 		Cfg:         cfg,
 		ProjectRoot: projectRoot,
 		Schema:      dbSchema,
+		SortOutput:  sortOutput,
 	}, nil
 }
 
@@ -140,7 +154,7 @@ func main() {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			projectRoot := args[0]
-			s, err := NewSQLVet(projectRoot)
+			s, err := NewSQLVet(projectRoot, flagSortOutput)
 			if err != nil {
 				cli.Exit(err)
 			}
@@ -162,6 +176,9 @@ func main() {
 	rootCmd.PersistentFlags().BoolVarP(
 		&flagErrFormat, "errorformat", "e", false,
 		"output error in errorformat fromat for easier integration")
+	rootCmd.PersistentFlags().BoolVarP(
+		&flagSortOutput, "sort", "s", false,
+		"sort output by filename and line number")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
