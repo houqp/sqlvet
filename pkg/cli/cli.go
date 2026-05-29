@@ -9,23 +9,23 @@ import (
 
 var Verbose = false
 
-func Show(format string, a ...interface{}) {
+func Show(format string, a ...any) {
 	fmt.Print(fmt.Sprintf(format+"\n", a...))
 }
 
-func Bold(format string, a ...interface{}) {
+func Bold(format string, a ...any) {
 	fmt.Print(aurora.Bold(fmt.Sprintf(format+"\n", a...)))
 }
 
-func Success(format string, a ...interface{}) {
+func Success(format string, a ...any) {
 	fmt.Print(aurora.Green(fmt.Sprintf(format+"\n", a...)))
 }
 
-func Error(format string, a ...interface{}) {
+func Error(format string, a ...any) {
 	fmt.Print(aurora.Red(fmt.Sprintf(format+"\n", a...)))
 }
 
-func Debug(format string, a ...interface{}) {
+func Debug(format string, a ...any) {
 	if Verbose {
 		fmt.Print(fmt.Sprintf("[DEBUG] "+format+"\n", a...))
 	}

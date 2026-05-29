@@ -35,7 +35,7 @@ type SQLVet struct {
 	SortOutput  bool
 }
 
-func (s *SQLVet) reportError(format string, a ...interface{}) {
+func (s *SQLVet) reportError(format string, a ...any) {
 	cli.Error(format, a...)
 	atomic.AddInt32(&s.ErrCnt, 1)
 }
