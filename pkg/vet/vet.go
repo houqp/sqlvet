@@ -521,12 +521,10 @@ func parseJoinExpr(ctx VetContext, clause *pg_query.JoinExpr, parseRe *ParseResu
 	if err != nil {
 		return err
 	}
-	err = parseExpression(ctx, clause.Quals, parseRe)
-	if err != nil {
-		return err
+	if clause.Quals == nil {
+		return nil
 	}
-
-	return nil
+	return parseExpression(ctx, clause.Quals, parseRe)
 }
 
 // find used column names from where clause

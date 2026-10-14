@@ -300,6 +300,11 @@ func TestInvalidSelect(t *testing.T) {
 			errors.New("invalid table name: barr"),
 		},
 		{
+			"invalid table in cross join",
+			`SELECT foo.id FROM foo CROSS JOIN barr`,
+			errors.New("invalid table name: barr"),
+		},
+		{
 			"invalid column in join",
 			`SELECT bar.id, value FROM foo LEFT JOIN bar ON foo.id=bar.uid WHERE foo.id=1`,
 			errors.New("column `uid` is not defined in table `bar`"),
@@ -462,6 +467,10 @@ func TestSelect(t *testing.T) {
 				FROM baz b
 				WHERE f.id = b.id) bzz ON true
 			WHERE value IS NULL`,
+		},
+		{
+			"select with cross join",
+			`SELECT foo.id, b.count FROM foo CROSS JOIN bar b`,
 		},
 		{
 			"select CTE",
